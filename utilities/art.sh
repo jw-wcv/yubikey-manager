@@ -130,3 +130,4 @@ whale_animation() {
     # Show cursor
     tput cnorm
 }
+

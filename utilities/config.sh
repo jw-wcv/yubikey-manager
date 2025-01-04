@@ -1,16 +1,10 @@
 #!/bin/bash
 
-# Import general utility functions
-source ./general.sh
-source ./keys.sh
-source ./settings.sh
-source ./ssh.sh
-
-backup_dir="$HOME/.yubikey_backups" #ROOT
-# ip_config_file="$HOME/.yubikey_ssh_config"
-ip_config_file="./resources/data/ipv6_config.json"  # Store in project directory
-key_backup_path="/Users/JJ/Documents/Projects/yubikey-manager/resources/keys/.yubikey_management_key"
-json_config_path="/Users/JJ/Documents/Projects/yubikey-manager/resources/data/yubi_config.json"
+# =============================================================================
+# Load Utilities and Environment
+# =============================================================================
+# Dynamically load all utility scripts and environment variables
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utilities/loader.sh"
 
 
 ################################################################################
@@ -68,11 +62,11 @@ generate_management_key() {
     log "INFO" "✅ New management key: $management_key"
 
     # Ensure the config path exists
-    mkdir -p "$(dirname "$json_config_path")"
+    mkdir -p "$(dirname "$JSON_CONFIG_PATH")"
 
     # Read existing JSON or initialize if not present
-    if [ -f "$json_config_path" ]; then
-        config=$(jq '.' "$json_config_path" 2>/dev/null) || config="{}"
+    if [ -f "$JSON_CONFIG_PATH" ]; then
+        config=$(jq '.' "$JSON_CONFIG_PATH" 2>/dev/null) || config="{}"
     else
         config="{}"
     fi
@@ -112,14 +106,14 @@ EOF
     log "DEBUG" "Updated Config: $updated_config"
 
     # Save updated config to file
-    echo "$updated_config" > "$json_config_path"
-    chmod 600 "$json_config_path"
-    log "INFO" "✅ Management key, PIN, and PUK saved to $json_config_path"
+    echo "$updated_config" > "$JSON_CONFIG_PATH"
+    chmod 600 "$JSON_CONFIG_PATH"
+    log "INFO" "✅ Management key, PIN, and PUK saved to $JSON_CONFIG_PATH"
 
     # Backup the management key to a hidden file
-    echo "$management_key" > "$key_backup_path"
-    chmod 600 "$key_backup_path"
-    log "INFO" "✅ Management key backed up to $key_backup_path"
+    echo "$management_key" > "$KEY_BACKUP_PATH"
+    chmod 600 "$KEY_BACKUP_PATH"
+    log "INFO" "✅ Management key backed up to $KEY_BACKUP_PATH"
 }
 
 
@@ -194,24 +188,21 @@ setup_rsa_piv_ssh() {
 
 # Configure SSH to Use FIDO2 SSH Key
 configure_fido2_ssh_config() {
-    local ssh_config="$HOME/.ssh/config"
-    local ssh_key="$HOME/.ssh/id_ecdsa_sk"
-
     log "INFO" "⚙️ Configuring SSH to use FIDO2 SSH key..."
 
     # Backup existing SSH config
-    cp "$ssh_config" "${ssh_config}.backup" 2>/dev/null
+    cp "$SSH_CONFIG" "${SSH_CONFIG}.backup" 2>/dev/null
 
     # Check if FIDO2 IdentityFile is already set
-    if grep -q "IdentityFile $ssh_key" "$ssh_config"; then
+    if grep -q "IdentityFile $SSH_KEY" "$SSH_CONFIG"; then
         log "INFO" "✅ SSH config already references the FIDO2 SSH key."
     else
         # Add configuration for FIDO2 key
-        cat <<EOL >> "$ssh_config"
+        cat <<EOL >> "$SSH_CONFIG"
 
 # YubiKey FIDO2 SSH Key
 Host *
-    IdentityFile $ssh_key
+    IdentityFile $SSH_KEY
     IdentitiesOnly yes
 EOL
         log "INFO" "🔧 Added FIDO2 SSH key configuration to SSH config."
@@ -220,20 +211,17 @@ EOL
 
 # Configure SSH to Use ssh-rsa via PIV
 configure_rsa_piv_ssh_config() {
-    local ssh_config="$HOME/.ssh/config"
-    local ssh_key_pub="$HOME/resources/keys/id_rsa_piv.pub"
-
     log "INFO" "⚙️ Configuring SSH to use ssh-rsa via PIV..."
 
     # Backup existing SSH config
-    cp "$ssh_config" "${ssh_config}.backup" 2>/dev/null
+    cp "$SSH_CONFIG" "${SSH_CONFIG}.backup" 2>/dev/null
 
     # Check if PKCS11Provider is already set
-    if grep -q "PKCS11Provider /opt/homebrew/lib/libykcs11.dylib" "$ssh_config"; then
+    if grep -q "PKCS11Provider /opt/homebrew/lib/libykcs11.dylib" "$SSH_CONFIG"; then
         log "INFO" "✅ PKCS11Provider already configured in SSH config."
     else
         # Add configuration for ssh-rsa via PIV
-        cat <<EOL >> "$ssh_config"
+        cat <<EOL >> "$SSH_CONFIG"
 
 # YubiKey ssh-rsa via PIV
 Host *

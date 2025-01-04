@@ -1,20 +1,27 @@
 #!/bin/bash
 
-# Import general utility functions
-source ./general.sh
-source ./keys.sh  # For key selection and SSH key management functions
-ipv6_config_file="./resources/data/ipv6_config.json"  # Store in project directory
+# =============================================================================
+# Load Utilities and Environment
+# =============================================================================
+# Dynamically load all utility scripts and environment variables
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utilities/loader.sh"
+
+
+################################################################################
+#####                         SSH Management                               #####
+################################################################################
+
 
 # Manage IP Config Table
 manage_ipv6_ssh_config() {
-    mkdir -p "$(dirname "$ipv6_config_file")"
-    touch "$ipv6_config_file"
+    mkdir -p "$(dirname "$IP_CONFIG_FILE")"
+    touch "$IP_CONFIG_FILE"
 
     log "INFO" "⚙️ Managing IPv6 SSH configurations..."
 
     # Display current entries
-    if [ -s "$ipv6_config_file" ]; then
-        cat "$ipv6_config_file" | jq
+    if [ -s "$IP_CONFIG_FILE" ]; then
+        cat "$IP_CONFIG_FILE" | jq
     else
         echo "No existing configurations."
     fi
@@ -34,10 +41,10 @@ manage_ipv6_ssh_config() {
             new_entry="{\"ipv6\":\"$ipv6_addr\", \"server\":\"$server_name\", \"key\":\"$key_path\"}"
 
             # Append the new entry to JSON
-            if [ -s "$ipv6_config_file" ]; then
-                jq ". += [$new_entry]" "$ipv6_config_file" > "$ipv6_config_file.tmp" && mv "$ipv6_config_file.tmp" "$ipv6_config_file"
+            if [ -s "$IP_CONFIG_FILE" ]; then
+                jq ". += [$new_entry]" "$IP_CONFIG_FILE" > "$IP_CONFIG_FILE.tmp" && mv "$IP_CONFIG_FILE.tmp" "$IP_CONFIG_FILE"
             else
-                echo "[$new_entry]" > "$ipv6_config_file"
+                echo "[$new_entry]" > "$IP_CONFIG_FILE"
             fi
 
             log "INFO" "✅ IPv6 entry saved for $server_name ($ipv6_addr)."
@@ -49,8 +56,8 @@ manage_ipv6_ssh_config() {
         ;;
     2)
         read -p "Enter server name or IPv6 to remove: " remove_entry
-        if jq "del(.[] | select(.ipv6 == \"$remove_entry\" or .server == \"$remove_entry\"))" "$ipv6_config_file" > "$ipv6_config_file.tmp"; then
-            mv "$ipv6_config_file.tmp" "$ipv6_config_file"
+        if jq "del(.[] | select(.ipv6 == \"$remove_entry\" or .server == \"$remove_entry\"))" "$IP_CONFIG_FILE" > "$IP_CONFIG_FILE.tmp"; then
+            mv "$IP_CONFIG_FILE.tmp" "$IP_CONFIG_FILE"
             log "INFO" "🗑 Entry removed for $remove_entry."
             echo -e "${GREEN}✅ Entry removed for $remove_entry.${RESET}"
         else
@@ -73,7 +80,7 @@ manage_ipv6_ssh_config() {
 # Start SSH Session Using Stored IPv6 Configurations
 start_selected_ssh_session() {
     log "INFO" "🔗 Starting SSH session using stored IPv6 configurations..."    
-    if [ ! -s "$ipv6_config_file" ]; then
+    if [ ! -s "$IP_CONFIG_FILE" ]; then
         log "WARN" "No IPv6 configurations found. Add an entry first."
         echo "No IPv6 configurations found."
         manage_ipv6_ssh_config
@@ -87,7 +94,7 @@ start_selected_ssh_session() {
         ipv6=$(echo "$entry" | jq -r '.ipv6')
         key=$(echo "$entry" | jq -r '.key')
         ipv6_entries+=("$server ($ipv6) -> $key")
-    done < <(jq -c '.[]' "$ipv6_config_file")
+    done < <(jq -c '.[]' "$IP_CONFIG_FILE")
     
     if [ ${#ipv6_entries[@]} -eq 0 ]; then
         log "WARN" "No IPv6 configurations found."

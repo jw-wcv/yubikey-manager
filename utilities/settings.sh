@@ -1,13 +1,10 @@
 #!/bin/bash
 
-# Import general utility functions
-source ./general.sh
-
-key_dir="/Users/JJ/Documents/Projects/yubikey-manager/resources/keys"
-recovery_key_path="$key_dir/recovery_key.enc"
-decrypted_key_path="/tmp/decrypted_recovery_key.txt"
-plist_path="$key_dir/config.plist"
-recovery_key_file="/Users/JJ/Documents/Projects/yubikey-manager/resources/keys/recovery_key.txt"
+# =============================================================================
+# Load Utilities and Environment
+# =============================================================================
+# Dynamically load all utility scripts and environment variables
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utilities/loader.sh"
 
 
 ################################################################################
@@ -64,9 +61,9 @@ factory_reset_yubikey() {
 
 # Backup SSH and YubiKey configuration
 backup_configuration() {
-    mkdir -p "$backup_dir"
-    cp "$ip_config_file" "$backup_dir/yubikey_ssh_config.bak.$(date +%s)"
-    log "INFO" "🔒 Configuration backed up to $backup_dir."
+    mkdir -p "$BACKUP_DIR"
+    cp "$IP_CONFIG_FILE" "$BACKUP_DIR/yubikey_ssh_config.bak.$(date +%s)"
+    log "INFO" "🔒 Configuration backed up to $BACKUP_DIR."
 
     log "INFO" "⚠️  Reminder: FIDO2 keys cannot be backed up directly. Ensure a second YubiKey is enrolled as a backup."
 }
@@ -75,9 +72,9 @@ backup_configuration() {
 # Restore latest backup configuration
 restore_configuration() {
     local latest_backup
-    latest_backup=$(ls -t "$backup_dir" | head -n 1)
+    latest_backup=$(ls -t "$BACKUP_DIR" | head -n 1)
     if [ -n "$latest_backup" ]; then
-        cp "$backup_dir/$latest_backup" "$ip_config_file"
+        cp "$BACKUP_DIR/$latest_backup" "$IP_CONFIG_FILE"
         log "INFO" "🔄 Configuration restored from $latest_backup."
     else
         log "WARN" "No backup found."
@@ -262,13 +259,13 @@ configure_smart_cards() {
 
 # Enable Full Disk Encryption
 enable_full_disk_encryption() {
-    mkdir -p "$key_dir"
+    mkdir -p "$KEY_DIR"
 
     log "INFO" "🔒 Enabling Full Disk Encryption with YubiKey..."
 
     # Fetch management key dynamically
     local management_key
-    management_key=$(jq -r '.management_key' "$key_dir/../data/yubi_config.json" 2>/dev/null)
+    management_key=$(jq -r '.management_key' "$KEY_DIR/../data/yubi_config.json" 2>/dev/null)
     if [[ -z "$management_key" || "$management_key" == "null" ]]; then
         log "ERROR" "❌ Management key not found. Configure YubiKey first."
         echo "Error: Management key not found. Cannot proceed."
@@ -277,7 +274,7 @@ enable_full_disk_encryption() {
 
     # Generate Key Pair in Slot 9d (Key Management)
     log "INFO" "🔑 Generating Key Management key in YubiKey slot 9d..."
-    ykman piv keys generate --management-key "$management_key" --touch-policy=always --pin-policy=always 9d "$key_dir/slot_9d_key.pub"
+    ykman piv keys generate --management-key "$management_key" --touch-policy=always --pin-policy=always 9d "$KEY_DIR/slot_9d_key.pub"
 
     if [ $? -ne 0 ]; then
         log "ERROR" "❌ Failed to generate key in slot 9d."
@@ -286,7 +283,7 @@ enable_full_disk_encryption() {
     fi
 
     # Export Public Key from Slot 9d for Encryption
-    ykman piv keys export 9d "$key_dir/slot_9d_key.pem"
+    ykman piv keys export 9d "$KEY_DIR/slot_9d_key.pem"
 
     if [ $? -ne 0 ]; then
         log "ERROR" "❌ Failed to export public key from YubiKey."
@@ -308,7 +305,7 @@ enable_full_disk_encryption() {
 
     # Encrypt Recovery Key with Exported Public Key (YubiKey Slot 9d)
     log "INFO" "🔐 Encrypting recovery key using YubiKey's public key (slot 9d)..."
-    echo "$recovery_key" | openssl pkeyutl -encrypt -pubin -inkey "$key_dir/slot_9d_key.pem" -out "$recovery_key_path"
+    echo "$recovery_key" | openssl pkeyutl -encrypt -pubin -inkey "$KEY_DIR/slot_9d_key.pem" -out "$RECOVERY_KEY_PATH"
 
     if [ $? -ne 0 ]; then
         log "ERROR" "❌ Failed to encrypt recovery key."
@@ -317,15 +314,15 @@ enable_full_disk_encryption() {
     fi
 
     # Update PLIST to Store the Actual Recovery Key
-    /usr/libexec/PlistBuddy -c "Delete :RecoveryKeyPath" "$plist_path" 2>/dev/null
-    /usr/libexec/PlistBuddy -c "Delete :RecoveryKey" "$plist_path" 2>/dev/null
-    /usr/libexec/PlistBuddy -c "Add :RecoveryKey string $recovery_key" "$plist_path"
+    /usr/libexec/PlistBuddy -c "Delete :RecoveryKeyPath" "$PLIST_PATH" 2>/dev/null
+    /usr/libexec/PlistBuddy -c "Delete :RecoveryKey" "$PLIST_PATH" 2>/dev/null
+    /usr/libexec/PlistBuddy -c "Add :RecoveryKey string $recovery_key" "$PLIST_PATH"
 
-    log "INFO" "🔏 Plaintext recovery key saved in plist for FileVault. Encrypted key backup stored at $recovery_key_path."
+    log "INFO" "🔏 Plaintext recovery key saved in plist for FileVault. Encrypted key backup stored at $RECOVERY_KEY_PATH."
 
     # Enable FileVault with Deferred Activation
     log "INFO" "🔄 Initiating FileVault encryption process..."
-    sudo fdesetup enable -defer "$plist_path" 2>&1 | tee /tmp/fdesetup_enable.log
+    sudo fdesetup enable -defer "$PLIST_PATH" 2>&1 | tee /tmp/fdesetup_enable.log
     enable_exit_code=${PIPESTATUS[0]}
 
     if [ $enable_exit_code -ne 0 ]; then
@@ -348,13 +345,13 @@ disable_full_disk_encryption() {
         log "WARN" "🕒 FileVault is in deferred mode. Disabling..."
         sudo fdesetup disable
         echo "FileVault is in deferred mode. Disabling."
-        rm -f "$plist_path"
+        rm -f "$PLIST_PATH"
         log "INFO" "🗑️  PLIST file removed after disabling FileVault in deferred mode."
         return
     fi
 
     # Check if the encrypted recovery key exists
-    if [ ! -f "$recovery_key_path" ]; then
+    if [ ! -f "$RECOVERY_KEY_PATH" ]; then
         log "ERROR" "❌ Encrypted recovery key not found. Cannot disable encryption."
         echo "Error: Encrypted recovery key missing. Generate it first."
         return
@@ -362,7 +359,7 @@ disable_full_disk_encryption() {
 
     # Decrypt the recovery key using the YubiKey
     log "INFO" "🔑 Decrypting recovery key with YubiKey (slot 9d)..."
-    if ! ykman piv decrypt 9d "$recovery_key_path" > "$decrypted_key_path" 2>&1; then
+    if ! ykman piv decrypt 9d "$RECOVERY_KEY_PATH" > "$decrypted_key_path" 2>&1; then
         log "ERROR" "❌ Failed to decrypt recovery key. Ensure the YubiKey is inserted and touch the key when prompted."
         echo "Error: Failed to decrypt recovery key. Cannot disable encryption."
         return
@@ -370,13 +367,13 @@ disable_full_disk_encryption() {
 
     # Disable FileVault using the decrypted key
     log "INFO" "🚫 Disabling FileVault..."
-    if sudo fdesetup disable -inputplist < "$plist_path"; then
+    if sudo fdesetup disable -inputplist < "$PLIST_PATH"; then
         log "INFO" "✅ FileVault disabled successfully."
         echo "FileVault has been disabled."
         
         # Remove the config.plist after successful disable
-        if [ -f "$plist_path" ]; then
-            rm -f "$plist_path"
+        if [ -f "$PLIST_PATH" ]; then
+            rm -f "$PLIST_PATH"
             log "INFO" "🗑️  PLIST file removed after disabling FileVault."
             echo "PLIST configuration removed."
         fi
@@ -442,15 +439,19 @@ generate_recovery_key() {
         return
     fi
 
-    echo "$recovery_key" | ykman piv encrypt 9d > "$recovery_key_path"
-    log "INFO" "🔏 Recovery key encrypted and stored at $recovery_key_path."
+    # Use the RECOVERY_KEY_FILE environment variable for storing the plaintext key
+    echo "$recovery_key" > "$RECOVERY_KEY_FILE"
+    echo "$recovery_key" | ykman piv encrypt 9d > "$RECOVERY_KEY_PATH"
+    
+    log "INFO" "🔏 Recovery key encrypted and stored at $RECOVERY_KEY_PATH."
+    log "INFO" "📄 Plaintext recovery key saved to $RECOVERY_KEY_FILE."
     echo "Recovery key successfully encrypted with YubiKey."
 }
 
 # Create Configuration Plist File
 create_plist_file() {    
-    echo "Creating FileVault configuration plist at $plist_path..."
-    log "INFO" "📝 Creating FileVault configuration plist at $plist_path..."
+    echo "Creating FileVault configuration plist at $PLIST_PATH..."
+    log "INFO" "📝 Creating FileVault configuration plist at $PLIST_PATH..."
 
     # Generate a secure Recovery Key
     recovery_key=$(openssl rand -base64 32)
@@ -461,8 +462,8 @@ create_plist_file() {
     read -s -p "Enter your macOS password: " mac_password
     echo ""
 
-    # Create the plist file with the provided information
-    cat <<EOF > "$plist_path"
+    # Create the plist file with the actual recovery key
+    cat <<EOF > "$PLIST_PATH"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -473,8 +474,8 @@ create_plist_file() {
     <array>
         <string>/</string>
     </array>
-    <key>RecoveryKeyPath</key>
-    <string>$recovery_key_file</string>
+    <key>RecoveryKey</key>
+    <string>$recovery_key</string>
     <key>UserRecords</key>
     <array>
         <dict>
@@ -489,13 +490,14 @@ create_plist_file() {
 EOF
 
     # Secure the plist file
-    chmod 600 "$plist_path"
-    log "INFO" "✅ Plist file created at $plist_path with secure permissions."
-    echo "Plist file created successfully at $plist_path."
+    chmod 600 "$PLIST_PATH"
+    log "INFO" "✅ Plist file created at $PLIST_PATH with secure permissions."
+    echo "Plist file created successfully at $PLIST_PATH."
 
-    # Save the Recovery Key to a separate file with strict permissions
-    echo "$recovery_key" > "$recovery_key_file"
-    chmod 600 "$recovery_key_file"
-    log "INFO" "🔑 Recovery Key saved to $recovery_key_file. Store it securely."
-    echo "Recovery Key saved to $recovery_key_file. Please store it securely."
+    # Save the Recovery Key to a separate file for storage
+    echo "$recovery_key" > "$RECOVERY_KEY_FILE"
+    chmod 600 "$RECOVERY_KEY_FILE"
+    log "INFO" "🔑 Recovery Key saved to $RECOVERY_KEY_FILE. Store it securely."
+    echo "Recovery Key saved to $RECOVERY_KEY_FILE. Please store it securely."
 }
+

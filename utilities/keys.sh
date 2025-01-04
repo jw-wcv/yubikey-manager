@@ -1,14 +1,10 @@
 #!/bin/bash
 
-# Import general utility functions
-source ./general.sh
-
-config_file="/Users/JJ/Documents/Projects/yubikey-manager/resources/data/yubi_config.json"
-export_dir="/Users/JJ/Documents/Projects/yubikey-manager/resources/keys"
-key_dir="/Users/JJ/Documents/Projects/yubikey-manager/resources/keys"
-path="/Users/JJ/Documents/Projects/yubikey-manager/"
-ssh_dir="$HOME/.ssh"
-
+# =============================================================================
+# Load Utilities and Environment
+# =============================================================================
+# Dynamically load all utility scripts and environment variables
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utilities/loader.sh"
 
 
 ################################################################################
@@ -29,7 +25,7 @@ list_keys () {
     log "INFO" "🔐 FIDO2 (ecdsa-sk/ed25519-sk) Keys:"
     
     # Scan for all resident keys ending with _sk in the .ssh directory
-    fido2_keys=$(ls $HOME/.ssh/*_sk 2>/dev/null)
+    fido2_keys=$(ls "$SSH_DIR"/*_sk 2>/dev/null)
 
     if [ -z "$fido2_keys" ]; then
         log "INFO" "No FIDO2 SSH keys found."
@@ -73,12 +69,11 @@ remove_key_from_yubikey() {
 
 # Select Key from List to Use for SSH Config 
 select_key_from_list() {
-    # ssh_dir="$HOME/.ssh"
-    keys=($(ls -1 "$ssh_dir" 2>/dev/null))
+    keys=($(ls -1 "$SSH_DIR" 2>/dev/null))
 
     if [ ${#keys[@]} -eq 0 ]; then
-        log "ERROR" "No files found in $ssh_dir."
-        echo -e "${RED}❌ No files found in $ssh_dir.${RESET}"
+        log "ERROR" "No files found in $SSH_DIR."
+        echo -e "${RED}❌ No files found in $SSH_DIR.${RESET}"
         return 1
     fi
 
@@ -87,7 +82,7 @@ select_key_from_list() {
         file_count=${#keys[@]}
         if [[ "$REPLY" =~ ^[0-9]+$ && "$REPLY" -ge 1 && "$REPLY" -le "$file_count" ]]; then
             selected_file="${keys[$((REPLY - 1))]}"
-            full_key_path="$ssh_dir/$selected_file"
+            full_key_path="$SSH_DIR/$selected_file"
             log "INFO" "Selected file: $full_key_path"
 
             # Handle PEM keys
@@ -139,11 +134,8 @@ select_key_from_list() {
 
 # Generate FIDO2 SSH Key Pair on YubiKey (Resident or Non-Resident)
 generate_fido2_ssh_key() {
-    local ssh_key="$HOME/.ssh/id_ecdsa_sk"
-    local ssh_key_pub="$ssh_key.pub"
-    local project_dir="/Users/JJ/Documents/Projects/yubikey-manager/resources/keys"
     local resident_flag=""
-    mkdir -p "$project_dir"
+    mkdir -p "$KEY_DIR"
 
     # Prompt user for resident or non-resident key
     echo ""
@@ -166,28 +158,28 @@ generate_fido2_ssh_key() {
     esac
 
     # Delete existing FIDO2 SSH key if it exists
-    if [ -f "$ssh_key" ]; then
+    if [ -f "$SSH_KEY" ]; then
         log "WARN" "⚠️ Existing FIDO2 SSH key detected. Removing old key to ensure consistency."
-        rm -f "$ssh_key" "$ssh_key_pub"
+        rm -f "$SSH_KEY" "$SSH_KEY_PUB"
         log "INFO" "🧹 Old FIDO2 SSH key removed."
     fi
 
     # Generate a new FIDO2 SSH key pair with chosen option
     log "INFO" "🛠️ Generating new FIDO2 SSH key pair..."
-    ssh-keygen -t ecdsa-sk $resident_flag -f "$ssh_key" -C "ALEPH_SERVICES"
+    ssh-keygen -t ecdsa-sk $resident_flag -f "$SSH_KEY" -C "ALEPH_SERVICES"
     
     if [ $? -eq 0 ]; then
         log "INFO" "✅ FIDO2 SSH key pair generated successfully."
-        log "INFO" "🔍 Public key located at $ssh_key_pub."
+        log "INFO" "🔍 Public key located at $SSH_KEY_PUB."
         
         # Backup the keys to the project directory
-        cp "$ssh_key_pub" "$project_dir/"
-        log "INFO" "🔑 Public key backed up to $project_dir/$(basename $ssh_key_pub)."
+        cp "$SSH_KEY_PUB" "$KEY_DIR/"
+        log "INFO" "🔑 Public key backed up to $KEY_DIR/$(basename $SSH_KEY_PUB)."
         
         # Check for private key (non-resident) and backup if available
-        if [ -f "$ssh_key" ]; then
-            cp "$ssh_key" "$project_dir/"
-            log "INFO" "🔑 Private key backed up to $project_dir/$(basename $ssh_key)."
+        if [ -f "$SSH_KEY" ]; then
+            cp "$SSH_KEY" "$KEY_DIR/"
+            log "INFO" "🔑 Private key backed up to $KEY_DIR/$(basename $SSH_KEY)."
         else
             log "INFO" "🔐 Resident key created - no private key file generated (stored directly on YubiKey)."
         fi
@@ -199,7 +191,6 @@ generate_fido2_ssh_key() {
 
 # Deploy FIDO2 Public Key to Remote Servers
 deploy_fido2_public_key() {
-    local ssh_key_pub="$HOME/.ssh/id_ecdsa_sk.pub"
     local remote_user="root"
     local remote_host="[ipv6_address]"  # Replace with your actual IPv6 address or hostname
 
@@ -212,7 +203,7 @@ deploy_fido2_public_key() {
     fi
 
     # Deploy using ssh-copy-id
-    ssh-copy-id -i "$ssh_key_pub" "$remote_user@$remote_host" || {
+    ssh-copy-id -i "$SSH_KEY_PUB" "$remote_user@$remote_host" || {
         log "ERROR" "❌ Failed to deploy FIDO2 public key to $remote_host."
         return 1
     }
@@ -221,24 +212,21 @@ deploy_fido2_public_key() {
 }
 
 # Export FIDO2 (ecdsa-sk/ed25519-sk) Public Key(s)
-export_fido2_public_key() {
-    local ssh_dir="$HOME/.ssh"
-    local export_dir="$HOME/yubikey_exports"
-    
+export_fido2_public_key() {  
     log "INFO" "🔐 Exporting FIDO2 public key(s)..."
 
     # Search for all FIDO2 keys (.pub) that match common patterns (ecdsa-sk, ed25519-sk)
-    fido2_keys=($(find "$ssh_dir" -maxdepth 1 -type f \( -name "*.pub" \) -exec grep -l "sk-" {} \;))
+    fido2_keys=($(find "$SSH_DIR" -maxdepth 1 -type f \( -name "*.pub" \) -exec grep -l "sk-" {} \;))
 
     # Create the export directory if it doesn't exist
-    mkdir -p "$export_dir"
+    mkdir -p "$KEY_DIR"
     
     exported=false
 
     for key_file in "${fido2_keys[@]}"; do
         if [ -f "$key_file" ]; then
             base_name=$(basename "$key_file")
-            export_file="$export_dir/$base_name"
+            export_file="$KEY_DIR/$base_name"
 
             # Copy the public key to the export directory
             cp "$key_file" "$export_file" 2>/dev/null
@@ -272,7 +260,7 @@ generate_rsa_piv_key() {
     echo "2) Generate Locally (with private key backup)"
     read -p "Select an option [1/2]: " generate_option
 
-    read -p "Enter a name for the new key (default: yubikey): " key_name
+    read -p "Enter a name for the new key (default: yubikey_rsa): " key_name
     key_name=${key_name:-yubikey}
 
     read -p "Select YubiKey slot to store the key (9a/9c) [default: 9a]: " yubikey_slot
@@ -291,22 +279,20 @@ generate_rsa_piv_key() {
 handleDeviceRSAGeneration() {
     local key_name=$1
     local yubikey_slot=$2
-    local key_dir="/Users/JJ/Documents/Projects/yubikey-manager/resources/keys"
-    local ssh_dir="$HOME/.ssh"
-    mkdir -p "$ssh_dir"
+    mkdir -p "$SSH_DIR"
 
     local management_key
-    management_key=$(jq -r '.management_key' "$key_dir/../data/yubi_config.json" 2>/dev/null)
+    management_key=$(jq -r '.management_key' "$KEY_DIR/../data/yubi_config.json" 2>/dev/null)
     if [[ -z "$management_key" || "$management_key" == "null" ]]; then
         log "ERROR" "❌ Management key not found. Configure YubiKey first."
         return
     fi
 
-    local pubkey_path="$ssh_dir/${yubikey_slot}_${key_name}.pub"
-    local cert_path="$ssh_dir/${yubikey_slot}_${key_name}_cert.pem"
+    local pubkey_path="$SSH_DIR/${yubikey_slot}_${key_name}.pub"
+    local cert_path="$SSH_DIR/${yubikey_slot}_${key_name}_cert.pem"
     local attestation_path="/tmp/${yubikey_slot}_${key_name}_attest.pem"
-    local project_pubkey_path="$key_dir/${yubikey_slot}_${key_name}.pub"
-    local project_cert_path="$key_dir/${yubikey_slot}_${key_name}_cert.pem"
+    local project_pubkey_path="$KEY_DIR/${yubikey_slot}_${key_name}.pub"
+    local project_cert_path="$KEY_DIR/${yubikey_slot}_${key_name}_cert.pem"
 
     log "INFO" "🔐 Generating key directly on YubiKey (Resident)..."
     ykman piv keys generate --pin-policy=once --touch-policy=always \
@@ -342,21 +328,19 @@ handleDeviceRSAGeneration() {
     fi
 }
 
-
-# Generate the Key on the Machine for Private key Access
+# Generate the Key on the Machine for Private Key Access
 handleLocalRSAGeneration() {
     local key_name=$1
     local yubikey_slot=$2
-    local key_dir="/Users/JJ/Documents/Projects/yubikey-manager/resources/keys"
-    local ssh_dir="$HOME/.ssh"
-    mkdir -p "$ssh_dir"
+    mkdir -p "$SSH_DIR"
 
-    local privkey_path="$ssh_dir/${yubikey_slot}_${key_name}"
+    local privkey_path="$SSH_DIR/${yubikey_slot}_${key_name}"
     local pem_path="$privkey_path.pem"
-    local pubkey_path="$ssh_dir/${yubikey_slot}_${key_name}.pub"
-    local cert_path="$key_dir/${yubikey_slot}_${key_name}_cert.pem"
-    local project_privkey_path="$key_dir/${yubikey_slot}_${key_name}" 
-    local project_pubkey_path="$key_dir/${yubikey_slot}_${key_name}.pub"
+    local pubkey_path="$SSH_DIR/${yubikey_slot}_${key_name}.pub"
+    local cert_path="$KEY_DIR/${yubikey_slot}_${key_name}_cert.pem"
+    local project_privkey_path="$KEY_DIR/${yubikey_slot}_${key_name}" 
+    local project_pubkey_path="$KEY_DIR/${yubikey_slot}_${key_name}.pub"
+    local project_pem_path="$KEY_DIR/${yubikey_slot}_${key_name}.pem"  # Path for PEM in project dir
 
     log "INFO" "🔑 Generating SSH key locally..."
     ssh-keygen -t rsa -b 2048 -f "$privkey_path" -C "$key_name" -o
@@ -369,61 +353,65 @@ handleLocalRSAGeneration() {
         cp "$pubkey_path" "$project_pubkey_path"
         log "INFO" "✅ Private and public keys cloned to project directory."
 
-        # Convert to PEM format and ensure permissions
+        # Convert to PEM format (keeping the original intact)
         log "INFO" "🔄 Converting private key to PEM format..."
-        ssh-keygen -p -m PEM -f "$privkey_path" -N "" -P "" > /dev/null 2>&1
+        ssh-keygen -p -m PEM -f "$privkey_path" -N "" -P ""
 
         if [ $? -eq 0 ] && [ -f "$privkey_path" ]; then
-            sudo mv "$privkey_path" "$pem_path"
+            cp "$privkey_path" "$pem_path"
             sudo chmod 600 "$pem_path"
-            log "INFO" "✅ Private key converted to PEM format and permissions secured."
+            log "INFO" "✅ PEM version created at $pem_path."
 
-            # Reformat PEM using openssl to ensure compatibility with ykman
-            sudo openssl rsa -in "$pem_path" -out "$pem_path" 2>&1
-            if [ $? -ne 0 ]; then
-                log "ERROR" "❌ PEM reformatting with openssl failed. Check PEM file integrity."
+            # Copy PEM to the project directory
+            cp "$pem_path" "$project_pem_path"
+            log "INFO" "✅ PEM version cloned to $project_pem_path."
+        else
+            log "ERROR" "❌ Failed to create PEM version. Aborting."
+            return
+        fi
+
+        # Reformat PEM using openssl to ensure compatibility with ykman
+        sudo openssl rsa -in "$pem_path" -out "$pem_path"
+        if [ $? -ne 0 ]; then
+            log "ERROR" "❌ PEM reformatting with openssl failed. Check PEM file integrity."
+            return
+        fi
+
+        # Regenerate the public key directly from the PEM file
+        sudo openssl rsa -in "$pem_path" -pubout -out "$pubkey_path"
+        sudo cp "$pubkey_path" "$project_pubkey_path"
+        log "INFO" "✅ Public key regenerated from PEM file."
+
+        # Import to YubiKey
+        read -p "Store this key in YubiKey slot $yubikey_slot? (y/N): " import_to_yubi
+        if [[ "$import_to_yubi" =~ ^[Yy]$ ]]; then
+            local management_key
+            management_key=$(jq -r '.management_key' "$KEY_DIR/../data/yubi_config.json" 2>/dev/null)
+            if [[ -z "$management_key" || "$management_key" == "null" ]]; then
+                log "ERROR" "❌ Management key not found. Configure YubiKey first."
                 return
             fi
 
-            # Regenerate the public key directly from the PEM file
-            sudo openssl rsa -in "$pem_path" -pubout -out "$pubkey_path"
-            sudo cp "$pubkey_path" "$project_pubkey_path"
-            log "INFO" "✅ Public key regenerated from PEM file."
+            log "INFO" "🔄 Importing private key to YubiKey slot $yubikey_slot..."
+            sudo ykman piv keys import "$yubikey_slot" "$pem_path" \
+            --management-key "$management_key" 2>&1 | tee /tmp/ykman_error.log
 
-            read -p "Store this key in YubiKey slot $yubikey_slot? (y/N): " import_to_yubi
-            if [[ "$import_to_yubi" =~ ^[Yy]$ ]]; then
-                local management_key
-                management_key=$(jq -r '.management_key' "$key_dir/../data/yubi_config.json" 2>/dev/null)
-                if [[ -z "$management_key" || "$management_key" == "null" ]]; then
-                    log "ERROR" "❌ Management key not found. Configure YubiKey first."
-                    return
-                fi
-
-                log "INFO" "🔄 Importing private key to YubiKey slot $yubikey_slot..."
-                sudo ykman piv keys import "$yubikey_slot" "$pem_path" \
-                --management-key "$management_key" 2>&1 | tee /tmp/ykman_error.log
-
+            if [ $? -eq 0 ]; then
+                log "INFO" "🔏 Generating self-signed certificate for slot $yubikey_slot..."
+                
+                ykman piv certificates generate --subject "CN=$key_name" \
+                --management-key "$management_key" "$yubikey_slot" "$pubkey_path" 2>&1 | tee /tmp/ykman_cert_error.log
+                
                 if [ $? -eq 0 ]; then
-                    log "INFO" "🔏 Generating self-signed certificate for slot $yubikey_slot..."
-                    
-                    # Use regenerated .pub file to ensure compatibility
-                    ykman piv certificates generate --subject "CN=$key_name" \
-                    --management-key "$management_key" "$yubikey_slot" "$pubkey_path" 2>&1 | tee /tmp/ykman_cert_error.log
-                    
-                    if [ $? -eq 0 ]; then
-                        ykman piv certificates export "$yubikey_slot" "$cert_path" --format=PEM
-                        cp "$cert_path" "$ssh_dir/${yubikey_slot}_${key_name}_cert.pem"
-                        log "INFO" "✅ Certificate exported to $cert_path and cloned to $ssh_dir/${yubikey_slot}_${key_name}_cert.pem."
-                    else
-                        log "ERROR" "❌ Failed to generate self-signed certificate."
-                    fi
+                    ykman piv certificates export "$yubikey_slot" "$cert_path" --format=PEM
+                    cp "$cert_path" "$SSH_DIR/${yubikey_slot}_${key_name}_cert.pem"
+                    log "INFO" "✅ Certificate exported to $cert_path and cloned to $SSH_DIR/${yubikey_slot}_${key_name}_cert.pem."
                 else
-                    log "ERROR" "❌ Failed to import private key into YubiKey."
+                    log "ERROR" "❌ Failed to generate self-signed certificate."
                 fi
+            else
+                log "ERROR" "❌ Failed to import private key into YubiKey."
             fi
-        else
-            log "ERROR" "❌ Failed to convert private key to PEM format."
-            return
         fi
     else
         log "ERROR" "❌ SSH key generation failed."
@@ -432,8 +420,6 @@ handleLocalRSAGeneration() {
 
 # Deploy ssh-rsa Public Key to Remote Servers
 deploy_rsa_piv_public_key() {
-    local key_dir="$HOME/resources/keys"
-    local ssh_key_pub="$key_dir/pubkey.pem"
     local remote_user="root"
     local remote_host="[ipv6_address]"  # Replace with your actual IPv6 address or hostname
 
@@ -446,8 +432,8 @@ deploy_rsa_piv_public_key() {
     fi
 
     # Convert PEM to OpenSSH format
-    ssh_key_openssh="$key_dir/id_rsa_piv.pub"
-    ssh-keygen -i -m PKCS8 -f "$ssh_key_pub" > "$ssh_key_openssh" 2>/dev/null
+    ssh_key_openssh="$KEY_DIR/id_rsa_piv.pub"
+    ssh-keygen -i -m PKCS8 -f "$SSH_KEY_PUB" > "$ssh_key_openssh" 2>/dev/null
 
     if [ $? -ne 0 ] || [ ! -f "$ssh_key_openssh" ]; then
         log "ERROR" "❌ Failed to convert PEM to OpenSSH public key format."
@@ -465,12 +451,10 @@ deploy_rsa_piv_public_key() {
 
 ### Convert Key to PKCS#12 Format (Optional for ssh-rsa via PIV)
 convert_pem_to_pkcs12() {
-    ssh_dir="$HOME/.ssh"
-    key_dir="/Users/JJ/Documents/Projects/yubikey-manager/resources/keys"
     available_combos=()
 
     # Search for matching key pairs
-    for dir in "$ssh_dir" "$key_dir"; do
+    for dir in "$SSH_DIR" "$KEY_DIR"; do
         if [ -d "$dir" ]; then
             for pem in "$dir"/*.pem; do
                 [ -f "$pem" ] || continue
@@ -491,7 +475,7 @@ convert_pem_to_pkcs12() {
 
     # Exit if no key combos found
     if [ ${#available_combos[@]} -eq 0 ]; then
-        log "ERROR" "❌ No matching key combos found in ~/.ssh or $key_dir."
+        log "ERROR" "❌ No matching key combos found in ~/.ssh or $KEY_DIR."
         return 1
     fi
 
@@ -507,13 +491,13 @@ convert_pem_to_pkcs12() {
         pem_file=$(echo "$selected_combo" | awk '{print $1}')
         pub_file=$(echo "$selected_combo" | awk '{print $3}')
         base_name="${pem_file%.pem}"
-        pem_path="$ssh_dir/$pem_file"
-        pub_path="$ssh_dir/$pub_file"
+        pem_path="$SSH_DIR/$pem_file"
+        pub_path="$SSH_DIR/$pub_file"
 
         # If not in ~/.ssh, check optional key_dir
         if [ ! -f "$pem_path" ]; then
-            pem_path="$key_dir/$pem_file"
-            pub_path="$key_dir/$pub_file"
+            pem_path="$KEY_DIR/$pem_file"
+            pub_path="$KEY_DIR/$pub_file"
         fi
 
         log "INFO" "Selected PEM: $pem_path"
@@ -562,11 +546,11 @@ convert_pem_to_pkcs12() {
     fi
 
     # Copy PKCS#12 file to both ~/.ssh and the project directory (if it exists)
-    cp "$export_path" "$ssh_dir/"
+    cp "$export_path" "$SSH_DIR/"
 
-    if [ -d "$key_dir" ]; then
-        cp "$export_path" "$key_dir/"
-        log "INFO" "✅ PKCS#12 copied to $key_dir"
+    if [ -d "$KEY_DIR" ]; then
+        cp "$export_path" "$KEY_DIR/"
+        log "INFO" "✅ PKCS#12 copied to $KEY_DIR"
     fi
 }
 
@@ -584,8 +568,8 @@ export_piv_public_key() {
     fi
 
     # Define export paths
-    mkdir -p "$export_dir"
-    export_file="$export_dir/piv_public_key_slot_${yubikey_slot}.pem"
+    mkdir -p "$KEY_DIR"
+    export_file="$KEY_DIR/piv_public_key_slot_${yubikey_slot}.pem"
 
     # Export the public key (using export-key instead of certificates if no cert exists)
     if ! ykman piv certificates export "$yubikey_slot" "$export_file" 2>/tmp/ykman_piv_export_error.log; then
@@ -618,7 +602,7 @@ import_key_to_yubikey() {
     timeout_duration=${timeout_duration:-30s}   # Default to 30 seconds if unset
 
     # Extract management key from config
-    management_key=$(jq -r '.management_key' "$config_file" 2>/dev/null)
+    management_key=$(jq -r '.management_key' "$JSON_CONFIG_PATH" 2>/dev/null)
 
     if [[ -z "$management_key" || "$management_key" == "null" ]]; then
         log "ERROR" "❌ Management key not found. Please configure the YubiKey first."

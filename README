@@ -1,0 +1,131 @@
+# YubiKey Manager - Whale Connected (v6.0)
+
+Welcome to **Whale Connected - YubiKey Manager v6.0** – a powerful tool designed to streamline the management of YubiKeys, secure SSH configurations, and enhance smart card and disk encryption management. This script offers a comprehensive, user-friendly terminal interface for managing YubiKey configurations, SSH keys, and system security settings.
+
+## Table of Contents
+- [Overview](#overview)
+- [Main Menu Breakdown](#main-menu-breakdown)
+  - [Setup Menu](#setup-menu)
+  - [Keys Management Menu](#keys-management-menu)
+  - [SSH Operations Menu](#ssh-operations-menu)
+  - [Settings Menu](#settings-menu)
+- [Key Features](#key-features)
+- [Prerequisites](#prerequisites)
+- [Installation and Usage](#installation-and-usage)
+- [Troubleshooting](#troubleshooting)
+- [Acknowledgments](#acknowledgments)
+
+---
+
+## Overview
+YubiKey Manager is an all-in-one solution for managing YubiKey-based authentication, SSH keys, and smart cards. With a streamlined CLI interface, this tool simplifies key generation, SSH setup, and backup processes, ensuring maximum security for system administrators, developers, and security-conscious users.
+
+The script leverages colorful menus and interactive prompts to guide users through various functionalities, offering extensive customization and automation.
+
+---
+
+## Main Menu Breakdown
+Upon execution, the script presents the **Main Menu** with the following options:
+
+### 1. Setup Menu
+Configure and initialize YubiKeys for secure authentication and SSH usage.
+
+**Options:**
+- **1) Install Dependencies** – Automatically installs necessary dependencies (e.g., `ykman`, `ssh`, `openssl`).
+- **2) Configure YubiKey (PIN, PUK, Management Key)** – Guides users through setting up or changing PINs, PUKs, and management keys for PIV.
+- **3) Configure YubiKey for SSH** – Sets up the YubiKey to generate FIDO2 SSH keys or RSA keys using the PIV interface.
+- **4) Back to Main Menu** – Returns to the main menu.
+
+---
+
+### 2. Keys Management Menu
+This menu focuses on SSH key generation, export, and YubiKey key management.
+
+**Options:**
+- **1) Generate FIDO2 SSH Key** – Creates a FIDO2 SSH key directly on the YubiKey.
+- **2) Generate ssh-rsa PIV Key** – Generates an RSA SSH key using the YubiKey PIV applet.
+- **3) Package PKCS12 PIV Key** – Converts private keys to the PKCS#12 format for import/export.
+- **4) Import SSH Key** – Imports existing SSH keys into the YubiKey.
+- **5) Export SSH Keys** – Exports public keys (FIDO2 or PIV) from the YubiKey.
+- **6) List SSH Keys** – Lists all SSH keys currently stored in the YubiKey.
+- **7) Remove SSH Key from YubiKey** – Deletes specific SSH keys from the YubiKey slots.
+- **8) Back to Main Menu** – Returns to the main menu.
+
+---
+
+### 3. SSH Operations Menu
+Handles SSH configurations and remote connections.
+
+**Options:**
+- **1) Manage SSH Configurations** – Opens or modifies SSH configurations, allowing users to add YubiKey SSH keys.
+- **2) Start SSH Session** – Starts an SSH session using IPv6 configurations saved in the system.
+- **3) Back to Main Menu** – Returns to the main menu.
+
+---
+
+### 4. Settings Menu
+Manage disk encryption, smart cards, and backup configurations.
+
+**Options:**
+- **1) Backup Configuration** – Backs up current YubiKey configurations (e.g., management keys, SSH keys).
+- **2) Restore Configuration** – Restores backed-up configurations.
+- **3) Manage OSX Full Disk Encryption** – Manages FileVault and encrypts/decrypts system disks using the YubiKey.
+- **4) Factory Reset YubiKey** – Fully resets the YubiKey to factory settings.
+- **5) Manage Smart Cards** – Configures smart cards to pair with macOS accounts.
+- **6) Back to Main Menu** – Returns to the main menu.
+
+---
+
+## Key Features
+- **Automated Dependency Installation** – Ensures the required tools (`ykman`, `openssl`, `jq`) are installed.
+- **SSH Key Management** – Create and manage SSH keys directly on YubiKey hardware.
+- **FIDO2 and PIV Support** – Generate FIDO2-based keys or use PIV applets for secure RSA keys.
+- **Smart Card Management** – Configure YubiKeys as macOS login smart cards.
+- **Disk Encryption** – Utilize YubiKey for macOS Full Disk Encryption (FileVault).
+- **Backup & Restore** – Easily back up and restore YubiKey configurations.
+- **Factory Reset** – Reset YubiKeys to factory settings if necessary.
+
+---
+
+## Prerequisites
+Ensure the following are installed:
+- **YubiKey Manager (ykman)** – Manage YubiKey functionalities.
+- **OpenSSH** – For SSH key generation and SSH agent handling.
+- **jq** – JSON parser to manipulate config files.
+- **openssl** – Encryption and certificate handling.
+- **bash** – Script is designed for bash environments (Linux/macOS/WSL).
+
+---
+
+## Installation and Usage
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/jw-wcv/yubikey-manager.git
+   cd yubikey-manager
+   ```
+2. Make the script executable:
+   ```bash
+   chmod +x key_manager.sh
+   ```
+3. Run the script:
+   ```bash
+   sudo ./key_manager.sh
+   ```
+4. Follow the on-screen prompts to manage YubiKey operations.
+
+---
+
+## Troubleshooting
+- **Key Not Recognized by SSH**:
+   - Ensure the public key has been added to the remote `~/.ssh/authorized_keys`.
+   - Use `ssh-add -L` to verify loaded SSH keys.
+- **PIN/PUK Errors**:
+   - Reset PINs using the **Setup** menu if locked out.
+- **SSH Connection Issues**:
+   - Use `ssh -vvv user@vm-ip` to debug connection issues.
+
+---
+
+## Acknowledgments
+Special thanks to the open-source community for continuous improvements to YubiKey tooling and integration solutions.
+

@@ -4,6 +4,7 @@
 # 🐋 Whale Connected - YubiKey Manager v6.0 - Enhanced UI
 # =============================================================================
 
+
 # =============================================================================
 # Define Color Codes
 # =============================================================================
@@ -16,35 +17,25 @@ CYAN='\033[36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
+
 # =============================================================================
 # Log File
 # =============================================================================
 log_file="./resources/logs/yubikey_manager.log"
 
-# =============================================================================
-# Load Utilities
-# =============================================================================
-# Ensure utility scripts exist before sourcing
-for util in ./utilities/config.sh ./utilities/ssh.sh ./utilities/settings.sh ./utilities/keys.sh ./utilities/general.sh; do
-    if [[ ! -f "$util" ]]; then
-        echo -e "${RED}❌ Utility script $util not found. Please ensure all utility scripts are present.${RESET}"
-        exit 1
-    fi
-done
 
-# Source utility scripts
-source ./utilities/config.sh
-source ./utilities/ssh.sh  # Ensure ssh.sh is sourced early
-source ./utilities/settings.sh
-source ./utilities/keys.sh
-source ./utilities/general.sh
-source ./utilities/art.sh
+# =============================================================================
+# Load Utilities and Environment
+# =============================================================================
+# Dynamically load all utility scripts and environment variables
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utilities/loader.sh"
 
 
 # =============================================================================
 # Trap to Ensure Cursor Visibility on Exit
 # =============================================================================
 trap "tput cnorm; echo -e '\n${RED}✖️  Script interrupted. Exiting...${RESET}'; exit" SIGINT SIGTERM
+
 
 # =============================================================================
 # Function to Display Main Menu
