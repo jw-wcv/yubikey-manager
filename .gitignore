@@ -1,0 +1,6 @@
+# Ignore environment and sensitive files
+.env
+/resources/data/
+resources/keys/
+/resources/logs/
+/artifacts/
