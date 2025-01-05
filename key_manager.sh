@@ -97,11 +97,12 @@ setup_menu() {
         echo -e "${YELLOW}1) Install Dependencies${RESET}"
         echo -e "${YELLOW}2) Configure YubiKey (PIN, PUK, Management Key)${RESET}"
         echo -e "${YELLOW}3) Configure Yubikey for SSH${RESET}"
-        echo -e "${YELLOW}4) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}4) 🚀 Ready Check 🚀${RESET}"
+        echo -e "${YELLOW}5) Back to Main Menu${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-3]: ${RESET}")" setup_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-5]: ${RESET}")" setup_choice
 
         case $setup_choice in
             1)
@@ -114,6 +115,9 @@ setup_menu() {
                 setup_yubikey_for_ssh
                 ;;
             4)
+                ready_check
+                ;;
+            5)
                 break
                 ;;
             *)
@@ -149,7 +153,7 @@ keys_management_menu() {
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-7]: ${RESET}")" keys_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-8]: ${RESET}")" keys_choice
 
         case $keys_choice in
             1)
@@ -204,7 +208,7 @@ ssh_operations_menu() {
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-4]: ${RESET}")" ssh_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-3]: ${RESET}")" ssh_choice
 
         case $ssh_choice in
             1)
@@ -240,14 +244,15 @@ settings_menu() {
         echo -e "${YELLOW}=========================================${RESET}"
         echo -e "${YELLOW}1) Backup Configuration${RESET}"
         echo -e "${YELLOW}2) Restore Configuration${RESET}"
-        echo -e "${YELLOW}3) Manage OSX Full Disk Encryption${RESET}"
-        echo -e "${YELLOW}4) Factory Reset YubiKey${RESET}"
-        echo -e "${YELLOW}5) Manage Smart Cards${RESET}"  # <-- Added Smart Card Management Option
-        echo -e "${YELLOW}6) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}3) Factory Reset YubiKey${RESET}"
+        echo -e "${YELLOW}4) Manage OSX Disk Encryption${RESET}"
+        echo -e "${YELLOW}5) Manage Smart Cards${RESET}"  
+        echo -e "${YELLOW}6) Manage OpenPGP Keys${RESET}"
+        echo -e "${YELLOW}7) Back to Main Menu${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-6]: ${RESET}")" settings_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-7]: ${RESET}")" settings_choice
 
         case $settings_choice in
             1)
@@ -257,15 +262,18 @@ settings_menu() {
                 restore_configuration
                 ;;
             3)
-                manage_disk_encryption
+                factory_reset_yubikey
                 ;;
             4)
-                factory_reset_yubikey
+                manage_disk_encryption
                 ;;
             5)
                 configure_smart_cards  
                 ;;
             6)
+                manage_openpgp_keys
+                ;;
+            7)
                 break
                 ;;
             *)

@@ -15,31 +15,43 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utilities/loader.sh"
 check_dependencies() {
     log "INFO" "🔍 Checking for required dependencies..."
     
-    # List of dependencies
-    local dependencies=("ykman" "openssl" "ssh")
+    local dependencies=("ykman" "openssl" "ssh" "gpg" "pinentry-mac")
     
-    # Loop through dependencies and install if missing
+    if ! command -v brew &>/dev/null; then
+        log "ERROR" "❌ Homebrew not found. Installing Homebrew..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
+            log "ERROR" "Failed to install Homebrew. Exiting..."
+            return 1
+        }
+    fi
+
     for dep in "${dependencies[@]}"; do
-        if ! command -v "$dep" &>/dev/null; then
+        if ! command -v "$dep" &>/dev/null && [ ! -f "/opt/homebrew/bin/$dep" ]; then
             log "WARN" "$dep not found. Installing..."
             
-            # Special handling for ykman (from Yubico tap)
-            if [ "$dep" == "ykman" ]; then
-                brew tap yubico/yubico
-                brew install ykman &>/dev/null &
-            else
-                brew install "$dep" &>/dev/null &
+            local attempts=0
+            until [ $attempts -ge 3 ]; do
+                sudo -u $(logname) brew install "$dep" &>/tmp/brew_install.log && break
+                attempts=$((attempts + 1))
+                log "WARN" "Attempt $attempts to install $dep failed. Retrying..."
+            done
+
+            if ! command -v "$dep" &>/dev/null && [ ! -f "/opt/homebrew/bin/$dep" ]; then
+                log "ERROR" "Failed to install $dep. Review Brew logs:"
+                cat /tmp/brew_install.log
+                read -rp "⚠️  Manual intervention needed. Retry? (y/N): " retry
+                if [[ $retry =~ ^[Yy]$ ]]; then
+                    sudo -u $(logname) brew install "$dep"
+                else
+                    log "ERROR" "$dep installation failed. Exiting..."
+                    error_exit "$dep installation failed."
+                fi
             fi
-            
-            spinner
-            
-            # Verify installation
-            if ! command -v "$dep" &>/dev/null; then
-                log "ERROR" "Failed to install $dep. Check brew logs."
-                error_exit "$dep installation failed."
-            fi
+        else
+            log "INFO" "$dep is already installed."
         fi
     done
+    
     log "INFO" "✅ All dependencies are installed."
 }
 
@@ -52,6 +64,7 @@ factory_reset_yubikey() {
         ykman piv reset
         ykman fido reset
         # ykman otp reset
+        ykman openpgp reset
         ykman oath reset
         log "INFO" "🧹 YubiKey has been reset to factory defaults."
     else
@@ -59,28 +72,79 @@ factory_reset_yubikey() {
     fi
 }
 
-# Backup SSH and YubiKey configuration
+# Backup SSH, YubiKey configuration, and PGP keys
 backup_configuration() {
     mkdir -p "$BACKUP_DIR"
+    mkdir -p "$KEY_DIR"
+
+    # Backup SSH configuration
     cp "$IP_CONFIG_FILE" "$BACKUP_DIR/yubikey_ssh_config.bak.$(date +%s)"
-    log "INFO" "🔒 Configuration backed up to $BACKUP_DIR."
+    cp "$IP_CONFIG_FILE" "$KEY_DIR/yubikey_ssh_config.bak.$(date +%s)"
+    log "INFO" "🔒 SSH Configuration backed up to $BACKUP_DIR and $KEY_DIR."
+
+    # Prompt for GPG key details
+    read -rp "Enter the email associated with your GPG key: " gpg_email
+    local timestamp
+    timestamp=$(date +%s)
+
+    # Export GPG keys (public and private) to BACKUP_DIR
+    log "INFO" "🔑 Exporting GPG public key to $BACKUP_DIR and $KEY_DIR..."
+    gpg --armor --export "$gpg_email" > "$BACKUP_DIR/yubikey_pub_$timestamp.asc"
+    gpg --armor --export "$gpg_email" > "$KEY_DIR/yubikey_pub_$timestamp.asc"
+    
+    if [ $? -eq 0 ]; then
+        log "INFO" "✅ Public key exported successfully to both locations."
+    else
+        log "ERROR" "❌ Failed to export public key."
+    fi 
+
+    log "INFO" "🔑 Exporting GPG private key to $BACKUP_DIR and $KEY_DIR..."
+    gpg --armor --export-secret-keys "$gpg_email" > "$BACKUP_DIR/yubikey_priv_$timestamp.asc"
+    gpg --armor --export-secret-keys "$gpg_email" > "$KEY_DIR/yubikey_priv_$timestamp.asc"
+    
+    if [ $? -eq 0 ]; then
+        log "INFO" "✅ Private key exported successfully to both locations."
+    else
+        log "ERROR" "❌ Failed to export private key."
+    fi
 
     log "INFO" "⚠️  Reminder: FIDO2 keys cannot be backed up directly. Ensure a second YubiKey is enrolled as a backup."
 }
 
 
-# Restore latest backup configuration
+# Restore latest backup configuration and PGP keys
 restore_configuration() {
     local latest_backup
     latest_backup=$(ls -t "$BACKUP_DIR" | head -n 1)
+    
     if [ -n "$latest_backup" ]; then
         cp "$BACKUP_DIR/$latest_backup" "$IP_CONFIG_FILE"
-        log "INFO" "🔄 Configuration restored from $latest_backup."
+        log "INFO" "🔄 SSH Configuration restored from $latest_backup."
     else
-        log "WARN" "No backup found."
+        log "WARN" "No SSH backup found."
     fi
-    log "INFO" "⚠️  Remember to verify FIDO2 backup YubiKeys are enrolled with your services."
+
+    log "INFO" "⚙️  Searching for PGP backups..."
+    local pgp_files
+    pgp_files=$(ls "$BACKUP_DIR"/yubikey_*_*.asc 2>/dev/null)
+    
+    if [ -z "$pgp_files" ]; then
+        log "WARN" "No PGP backups found."
+        return
+    fi
+
+    log "INFO" "Available PGP backups:"
+    echo "$pgp_files"
+    
+    for pgp_file in $pgp_files; do
+        log "INFO" "🔑 Importing $pgp_file..."
+        gpg --import "$pgp_file"
+    done
+
+    log "INFO" "✅ PGP keys imported successfully. Run 'gpg --list-keys' to verify."
 }
+
+
 
 
 ################################################################################
@@ -500,4 +564,124 @@ EOF
     log "INFO" "🔑 Recovery Key saved to $RECOVERY_KEY_FILE. Store it securely."
     echo "Recovery Key saved to $RECOVERY_KEY_FILE. Please store it securely."
 }
+
+################################################################################
+#####                        OpenPGP Config                                #####
+################################################################################
+
+# Setup Yubikey to support OpenGPG to Encrypt SSH Manager for Ledger Storage
+setup_openpgp_yubikey() {
+    check_yubikey_presence || return
+    
+    # Run GPG configuration script to handle permissions and services
+    log "INFO" "🔄 Running GPG configuration to prepare the YubiKey device..."
+    configureGPG || {
+        log "ERROR" "❌ GPG configuration failed. Exiting..."
+        return 1
+    }
+    
+    # Reset OpenPGP if needed
+    log "INFO" "🔍 Checking YubiKey for OpenPGP applet activation..."
+    ykman openpgp info &>/dev/null
+    if [ $? -ne 0 ]; then
+        log "WARN" "⚙️ OpenPGP applet not responding. Resetting YubiKey OpenPGP..."
+        sudo ykman openpgp reset
+        if [ $? -ne 0 ]; then
+            log "ERROR" "❌ Failed to reset OpenPGP applet. Exiting..."
+            return 1
+        fi
+        log "INFO" "✅ OpenPGP applet reset complete."
+    else
+        log "INFO" "✅ OpenPGP applet already activated."
+    fi
+
+    # Ensure the GPG agent uses the correct terminal
+    export GPG_TTY=$(tty)
+    gpg-connect-agent updatestartuptty /bye
+
+    # Begin manual key generation
+    log "INFO" "🔑 Opening GPG card admin for key generation..."
+    gpg --card-edit
+
+    log "INFO" "⚠️  Follow the prompts: Enter 'admin' then 'generate' to proceed."
+    log "INFO" "If existing keys are detected, you will be asked to overwrite them."
+}
+
+# Confirm GPG Build 
+configureGPG() {
+    log "🔧 Configuring GPG and YubiKey environment..."
+
+    # Ensure ~/.gnupg directory exists and set correct permissions
+    if [ ! -d ~/.gnupg ]; then
+        log "Creating ~/.gnupg directory..."
+        mkdir -p ~/.gnupg
+    fi
+
+    log "Fixing ownership and permissions of ~/.gnupg..."
+    sudo chown -R $USER ~/.gnupg
+    sudo chmod 700 ~/.gnupg
+    sudo chmod 600 ~/.gnupg/* || log "No files to update permissions on."
+
+    # Configure pinentry for macOS to avoid passphrase prompt errors
+    log "Configuring pinentry for macOS..."
+    echo "pinentry-program /opt/homebrew/bin/pinentry-mac" > ~/.gnupg/gpg-agent.conf
+
+    # Kill any running GPG agents and refresh
+    log "Restarting gpg-agent and scdaemon..."
+    gpgconf --kill gpg-agent
+    sudo pkill scdaemon
+    sudo killall pcscd || log "No pcscd processes to kill."
+
+    # Ensure GPG agent uses the correct terminal
+    export GPG_TTY=$(tty)
+    gpg-connect-agent updatestartuptty /bye
+
+    # Restart YubiKey-related services
+    log "Restarting YubiKey services..."
+    sudo launchctl stop com.apple.ifdreader
+    sudo launchctl start com.apple.ifdreader
+
+    # Final check to ensure YubiKey is recognized
+    log "Checking YubiKey status..."
+    ykman list || log "No YubiKey detected! Ensure the device is connected."
+
+    log "✅ GPG and YubiKey environment configured successfully."
+
+    # Display YubiKey card status
+    gpg --card-status
+}
+
+# Manage OpenPGP Functions Menu
+manage_openpgp_keys() {
+    echo "--------------------------------------"
+    echo "  🔐 OpenPGP Configuration Manager     "
+    echo "--------------------------------------"
+    echo "1) Setup YubiKey for OpenPGP (Generate Keys)"
+    echo "2) Configure GPG Environment"
+    echo "3) Exit"
+    echo ""
+
+    read -rp "Select an option [1-3]: " choice
+
+    case $choice in
+        1)
+            log "INFO" "🔑 Starting OpenPGP setup on YubiKey..."
+            setup_openpgp_yubikey
+            ;;
+        2)
+            log "INFO" "🔄 Configuring GPG environment and permissions..."
+            configureGPG || log "ERROR" "❌ GPG configuration failed. Please check permissions and try again."
+            ;;
+        3)
+            log "INFO" "❌ Exiting OpenPGP configuration manager."
+            echo "Goodbye!"
+            exit 0
+            ;;
+        *)
+            log "WARN" "⚠️ Invalid option selected."
+            echo "Invalid option. Please try again."
+            ;;
+    esac
+}
+
 

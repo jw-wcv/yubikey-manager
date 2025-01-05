@@ -183,6 +183,15 @@ generate_fido2_ssh_key() {
         else
             log "INFO" "🔐 Resident key created - no private key file generated (stored directly on YubiKey)."
         fi
+
+        # Ensure a FIDO2 PIN is set immediately after key generation
+        log "INFO" "🔐 Setting FIDO2 PIN (required for credential management)..."
+        ykman fido access change-pin
+        if [ $? -eq 0 ]; then
+            log "INFO" "✅ FIDO2 PIN set successfully."
+        else
+            log "ERROR" "❌ Failed to set FIDO2 PIN. Credential management might be limited."
+        fi
     else
         log "ERROR" "❌ Failed to generate FIDO2 SSH key pair."
         return 1

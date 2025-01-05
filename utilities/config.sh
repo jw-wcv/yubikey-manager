@@ -233,3 +233,105 @@ EOL
 }
 
 
+################################################################################
+#####                            Ready Check                               #####
+################################################################################
+
+# YubiKey Ready Check and System Configuration
+ready_check() {
+    log() {
+        echo "$(date +'%Y-%m-%d %H:%M:%S') [INFO] - $1"
+    }
+
+    log "🔍 Running YubiKey Ready Check..."
+
+    # 1. Check YubiKey JSON Configuration
+    if [ ! -f "$JSON_CONFIG_PATH" ] || ! grep -q "management_key" "$JSON_CONFIG_PATH"; then
+        log "❌ YubiKey configuration is incomplete or missing."
+        echo "Redirecting to YubiKey configuration..."
+        configure_yubikey
+        return
+    else
+        log "✅ YubiKey JSON configuration found."
+    fi
+
+    # 2. Confirm FIDO/SSH Key (Slot 9a or 9c)
+    local fido_key_present
+    fido_key_present=$(ykman piv info | grep -E "9a|9c" || echo "not_found")
+    
+    if [[ "$fido_key_present" == "not_found" ]]; then
+        log "⚠️ No SSH or FIDO2 keys found on YubiKey (Slot 9a/9c)."
+        echo "Redirecting to SSH/FIDO key setup..."
+        setup_yubikey_for_ssh
+        return
+    else
+        log "✅ YubiKey SSH/FIDO key detected."
+    fi
+
+    # 3. Ask About Additional Configurations (FileVault, Smart Card, OpenPGP)
+    echo "Would you like to configure any of the following services?"
+    echo "1) FileVault (macOS Disk Encryption)"
+    echo "2) Smart Card Pairing"
+    echo "3) OpenPGP Setup"
+    echo "4) Configure All"
+    echo "5) Skip Additional Configurations"
+    read -rp "Select an option [1-5]: " service_choice
+
+    case $service_choice in
+        1)
+            log "🔒 Configuring FileVault..."
+            manage_full_disk_encryption
+            ;;
+        2)
+            log "💳 Managing Smart Cards..."
+            configure_smart_cards
+            ;;
+        3)
+            log "🔑 Managing OpenPGP Keys..."
+            manage_openpgp_keys
+            ;;
+        4)
+            log "⚙️ Configuring All Services (FileVault, Smart Card, OpenPGP)..."
+            manage_full_disk_encryption
+            configure_smart_cards
+            manage_openpgp_keys
+            ;;
+        5)
+            log "⏩ Skipping additional configurations."
+            ;;
+        *)
+            log "❌ Invalid option. Please choose between 1-5."
+            ;;
+    esac
+
+    # 4. Final Validation - Ensure Configurations Are Active
+    log "🔄 Verifying Configurations..."
+    
+    # Verify PGP Keys
+    gpg --list-keys &>/dev/null
+    if [ $? -eq 0 ]; then
+        log "✅ OpenPGP keys detected."
+    else
+        log "❌ No OpenPGP keys found. Run 'manage_openpgp_keys' to generate keys."
+    fi
+
+    # Verify Smart Card
+    sc_auth identities &>/dev/null
+    if [ $? -eq 0 ]; then
+        log "✅ Smart Card detected and paired."
+    else
+        log "❌ No Smart Card paired. Use 'configure_smart_cards' to pair."
+    fi
+
+    # Verify FileVault (macOS Specific)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        fdesetup status | grep "FileVault is On" &>/dev/null
+        if [ $? -eq 0 ]; then
+            log "✅ FileVault is enabled."
+        else
+            log "❌ FileVault is not enabled. Run 'manage_full_disk_encryption'."
+        fi
+    fi
+
+    log "🏁 YubiKey Ready Check Complete."
+}
