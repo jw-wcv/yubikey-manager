@@ -416,6 +416,21 @@ manage_ipv6_ssh_config() {
         read -p "Enter server name: " server_name
         read -p "Use YubiKey for this host? (y/n): " use_yubikey
 
+        # Check for existing entries in IPv6 artifact
+        if jq -e --arg server "$server_name" '.[] | select(.server == $server)' "$IPV6_ARTIFACT" > /dev/null; then
+            echo -e "${RED}❌ Entry for $server_name already exists in IPv6 artifact. Skipping...${RESET}"
+            log "WARN" "$server_name already exists in IPv6 artifact. Skipping..."
+            return
+        fi
+
+        # Check for existing entries in SSH Config
+        if grep -q "^Host $server_name\$" "$SSH_CONFIG_FILE"; then
+            echo -e "${RED}❌ Host $server_name already exists in SSH config. Skipping...${RESET}"
+            log "WARN" "$server_name already exists in SSH config. Skipping..."
+            return
+        fi
+
+        # Determine how to add the entry
         if [ "$use_yubikey" == "y" ]; then
             read -p "IPv4 or IPv6? (4/6): " ip_version
             read -p "Enter username (default: root): " user_name
@@ -493,3 +508,4 @@ EOF
         ;;
     esac
 }
+
