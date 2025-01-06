@@ -923,7 +923,6 @@ manage_yubikey_pins() {
 # =============================================================================
 manage_piv_pins() {
     while true; do
-        clear
         echo -e "${MAGENTA}${BOLD}Manage PIV PIN(s)${RESET}"
         echo -e "${YELLOW}1) Change PIV User PIN${RESET}"
         echo -e "${YELLOW}2) Unblock/Reset PIV PIN (Requires PUK)${RESET}"
@@ -936,15 +935,15 @@ manage_piv_pins() {
         case $piv_choice in
             1)
                 echo -e "${CYAN}Changing the PIV User PIN will not erase certificates but will lock the YubiKey after 3 failed attempts.${RESET}"
-                ykman piv change-pin
+                ykman piv access change-pin
                 ;;
             2)
                 echo -e "${CYAN}Resetting the PIV PIN requires the PUK. 3 failed attempts will permanently block PIV.${RESET}"
-                ykman piv unblock-pin
+                ykman piv access unblock-pin
                 ;;
             3)
                 echo -e "${CYAN}Changing the Management Key will not erase keys but losing it will prevent administrative actions.${RESET}"
-                ykman piv change-management-key
+                ykman piv access change-management-key
                 ;;
             4)
                 break
@@ -962,7 +961,6 @@ manage_piv_pins() {
 # =============================================================================
 manage_fido2_pins() {
     while true; do
-        clear
         echo -e "${MAGENTA}${BOLD}Manage FIDO2 PIN(s)${RESET}"
         echo -e "${YELLOW}1) Change FIDO2 PIN${RESET}"
         echo -e "${YELLOW}2) Reset FIDO2 (Erases all FIDO credentials)${RESET}"
@@ -999,7 +997,6 @@ manage_fido2_pins() {
 # =============================================================================
 manage_openpgp_pins() {
     while true; do
-        clear
         echo -e "${MAGENTA}${BOLD}Manage OpenPGP PIN(s)${RESET}"
         echo -e "${YELLOW}1) Change OpenPGP User PIN${RESET}"
         echo -e "${YELLOW}2) Change OpenPGP Admin PIN${RESET}"
