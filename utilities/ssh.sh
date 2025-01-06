@@ -140,7 +140,6 @@ select_key_from_list() {
 }
 
 
-# Start SSH Session Using Stored IPv6 Configurations
 start_selected_ssh_session() {
     log "INFO" "🔗 Starting SSH session using stored IPv6 configurations..."    
     if [ ! -s "$IP_CONFIG_FILE" ]; then
@@ -174,57 +173,23 @@ start_selected_ssh_session() {
             echo -e "${YELLOW}⚠️  Operation canceled.${RESET}"
             break
         elif [ -n "$choice" ]; then
-            ipv6_addr=$(echo "$choice" | sed -n 's/.*(\([^)]*\)).*/\1/p')
-            key=$(echo "$choice" | awk -F'->' '{print $2}' | xargs)
+            server_name=$(echo "$choice" | awk -F' ' '{print $1}')
+            log "INFO" "Selected server: $server_name"
+            ssh $server_name
             
-            if [ -n "$ipv6_addr" ]; then
-                log "INFO" "Selected IPv6: $ipv6_addr"
-                log "INFO" "Using SSH Key: $key"
-                
-                # Detect key type (FIDO or Regular)
-                if [[ "$key" == *"_sk"* ]]; then
-                    # FIDO2/WebAuthn keys - Use PKCS#11
-                    log "INFO" "Detected FIDO2 key. Using PKCS#11 provider for direct authentication."
-                    SSH_AUTH_SOCK= ssh -o IdentitiesOnly=yes \
-                        -o PKCS11Provider=/opt/homebrew/lib/libykcs11.dylib \
-                        -o PreferredAuthentications=publickey \
-                        -i "$key" root@"$ipv6_addr"
-                else
-                    # Regular RSA/ECDSA/ED25519 keys - Use SSH agent or direct key path
-                    log "INFO" "Detected standard SSH key. Proceeding with standard SSH authentication."
-                    
-                    # Test if key is loaded in agent
-                    ssh-add -L | grep -q "$key"
-                    if [ $? -ne 0 ]; then
-                        log "WARN" "Key not found in agent. Adding key: $key"
-                        ssh-add "$key"
-                        if [ $? -ne 0 ]; then
-                            log "ERROR" "Failed to add key to SSH agent."
-                            return
-                        fi
-                    else
-                        log "INFO" "✅ Key is already loaded in the agent."
-                    fi
-                    
-                    ssh -o IdentitiesOnly=yes -i "$key" root@"$ipv6_addr"
-                fi
-                
-                if [ $? -eq 0 ]; then
-                    log "INFO" "✅ SSH session established to $ipv6_addr."
-                else
-                    log "ERROR" "Failed to connect to $ipv6_addr."
-                fi
-                break
+            if [ $? -eq 0 ]; then
+                log "INFO" "✅ SSH session established to $server_name."
             else
-                log "WARN" "Failed to extract IPv6 address from selection."
-                echo -e "${RED}❌ Failed to extract IPv6 address from selection.${RESET}"
+                log "ERROR" "Failed to connect to $server_name."
             fi
+            break
         else
             log "WARN" "Invalid selection. Try again."
             echo -e "${RED}❌ Invalid selection. Try again.${RESET}"
         fi
     done
 }
+
 
 
 
