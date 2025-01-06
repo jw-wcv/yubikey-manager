@@ -87,7 +87,7 @@ configure_yubikey_9a_9d() {
 # Generate Resident RSA Key and Cert for 9c
 configure_yubikey_9c() {
     local yubikey_slot="9c"
-    local key_name="ssh_rsa_key"
+    local key_name="Guardian_Seal"
 
     # Avoid prefix duplication
     if [[ ! "$key_name" =~ ^${yubikey_slot}_ ]]; then
