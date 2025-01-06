@@ -221,9 +221,9 @@ ssh_operations_menu() {
 }
 
 # =============================================================================
-# Function for Settings Submenu
+# Function for Settings Submenu  manage_yubikey_pins
 # =============================================================================
-settings_menu() {
+settings_menu() { #adding PIN Manager, ~/.ssh/config + ssh-add Manager etc
     while true; do
         clear
         ascii_art
@@ -232,16 +232,17 @@ settings_menu() {
         echo -e "${YELLOW}=========================================${RESET}"
         echo -e "${YELLOW}1) Backup Configuration${RESET}"
         echo -e "${YELLOW}2) Restore Configuration${RESET}"
-        echo -e "${YELLOW}3) Manage OSX Disk Encryption${RESET}"
-        echo -e "${YELLOW}4) Manage Smart Cards${RESET}"  
-        echo -e "${YELLOW}5) Manage OpenPGP Keys${RESET}"
-        echo -e "${YELLOW}6) Factory Reset YubiKey${RESET}"
-        echo -e "${YELLOW}7) Reset ~/.SSH+ Perms${RESET}"
-        echo -e "${YELLOW}8) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}3) Manage Yubikey PINs${RESET}"
+        echo -e "${YELLOW}4) Manage OSX Disk Encryption${RESET}"
+        echo -e "${YELLOW}5) Manage Smart Cards${RESET}"  
+        echo -e "${YELLOW}6) Manage OpenPGP Keys${RESET}"
+        echo -e "${YELLOW}7) Factory Reset YubiKey${RESET}"
+        echo -e "${YELLOW}8) Reset ~/.SSH+ Perms${RESET}"
+        echo -e "${YELLOW}9) Back to Main Menu${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-8]: ${RESET}")" settings_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-9]: ${RESET}")" settings_choice
 
         case $settings_choice in
             1)
@@ -251,21 +252,24 @@ settings_menu() {
                 restore_configuration
                 ;;
             3)
-                manage_disk_encryption
+                manage_yubikey_pins
                 ;;
             4)
-                configure_smart_cards
+                manage_disk_encryption
                 ;;
             5)
-                manage_openpgp_keys  
+                configure_smart_cards  
                 ;;
             6)
-                factory_reset_yubikey
+                manage_openpgp_keys
                 ;;
             7)
-                fix_permissions
+                factory_reset_yubikey
                 ;;
             8)
+                factory_reset_yubikey
+                ;;
+            9)
                 break
                 ;;
             *)

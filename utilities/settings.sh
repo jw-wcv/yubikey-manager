@@ -869,3 +869,169 @@ fix_permissions() {
         log "ℹ Permissions for ~/.gnupg already set correctly"
     fi
 }
+
+
+
+
+
+################################################################################
+#####                            PIN Config                                #####
+################################################################################ 
+
+manage_yubikey_pins() {
+    while true; do
+        clear
+        ascii_art
+        echo -e "${CYAN}${BOLD}🛠️  YubiKey Manager - PIN Management${RESET}"
+        echo -e "${MAGENTA}${BOLD}YubiKey PIN Management Menu:${RESET}"
+        echo -e "${YELLOW}=========================================${RESET}"
+        echo -e "${YELLOW}1) Manage PIV PIN(s)${RESET}"
+        echo -e "${YELLOW}2) Manage FIDO2 PIN(s)${RESET}"
+        echo -e "${YELLOW}3) Manage OpenPGP PIN(s)${RESET}"
+        echo -e "${YELLOW}4) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}=========================================${RESET}"
+        echo ""
+
+        read -rp "$(echo -e "${CYAN}Select an option [1-4]: ${RESET}")" pin_choice
+
+        case $pin_choice in
+            1)
+                manage_piv_pins
+                ;;
+            2)
+                manage_fido2_pins
+                ;;
+            3)
+                manage_openpgp_pins
+                ;;
+            4)
+                break
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid option. Please try again.${RESET}"
+                sleep 1
+                ;;
+        esac
+
+        echo ""
+        read -rp "$(echo -e "${CYAN}Press Enter to continue...${RESET}")" _
+    done
+}
+
+# =============================================================================
+# Manage PIV PIN(s)
+# =============================================================================
+manage_piv_pins() {
+    while true; do
+        clear
+        echo -e "${MAGENTA}${BOLD}Manage PIV PIN(s)${RESET}"
+        echo -e "${YELLOW}1) Change PIV User PIN${RESET}"
+        echo -e "${YELLOW}2) Unblock/Reset PIV PIN (Requires PUK)${RESET}"
+        echo -e "${YELLOW}3) Change PIV Management Key${RESET}"
+        echo -e "${YELLOW}4) Back to PIN Management Menu${RESET}"
+        echo ""
+
+        read -rp "$(echo -e "${CYAN}Select an option [1-4]: ${RESET}")" piv_choice
+
+        case $piv_choice in
+            1)
+                echo -e "${CYAN}Changing the PIV User PIN will not erase certificates but will lock the YubiKey after 3 failed attempts.${RESET}"
+                ykman piv change-pin
+                ;;
+            2)
+                echo -e "${CYAN}Resetting the PIV PIN requires the PUK. 3 failed attempts will permanently block PIV.${RESET}"
+                ykman piv unblock-pin
+                ;;
+            3)
+                echo -e "${CYAN}Changing the Management Key will not erase keys but losing it will prevent administrative actions.${RESET}"
+                ykman piv change-management-key
+                ;;
+            4)
+                break
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid option. Please try again.${RESET}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# =============================================================================
+# Manage FIDO2 PIN(s)
+# =============================================================================
+manage_fido2_pins() {
+    while true; do
+        clear
+        echo -e "${MAGENTA}${BOLD}Manage FIDO2 PIN(s)${RESET}"
+        echo -e "${YELLOW}1) Change FIDO2 PIN${RESET}"
+        echo -e "${YELLOW}2) Reset FIDO2 (Erases all FIDO credentials)${RESET}"
+        echo -e "${YELLOW}3) Back to PIN Management Menu${RESET}"
+        echo ""
+
+        read -rp "$(echo -e "${CYAN}Select an option [1-3]: ${RESET}")" fido_choice
+
+        case $fido_choice in
+            1)
+                echo -e "${CYAN}Changing the FIDO2 PIN will not erase credentials.${RESET}"
+                ykman fido change-pin
+                ;;
+            2)
+                echo -e "${RED}⚠️ Resetting FIDO2 will erase all FIDO credentials. This cannot be undone.${RESET}"
+                read -rp "Are you sure you want to proceed? (y/N): " confirm
+                if [[ $confirm =~ ^[Yy]$ ]]; then
+                    ykman fido reset
+                fi
+                ;;
+            3)
+                break
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid option. Please try again.${RESET}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# =============================================================================
+# Manage OpenPGP PIN(s)
+# =============================================================================
+manage_openpgp_pins() {
+    while true; do
+        clear
+        echo -e "${MAGENTA}${BOLD}Manage OpenPGP PIN(s)${RESET}"
+        echo -e "${YELLOW}1) Change OpenPGP User PIN${RESET}"
+        echo -e "${YELLOW}2) Change OpenPGP Admin PIN${RESET}"
+        echo -e "${YELLOW}3) Reset OpenPGP (Erases keys and data)${RESET}"
+        echo -e "${YELLOW}4) Back to PIN Management Menu${RESET}"
+        echo ""
+
+        read -rp "$(echo -e "${CYAN}Select an option [1-4]: ${RESET}")" pgp_choice
+
+        case $pgp_choice in
+            1)
+                echo -e "${CYAN}Changing the OpenPGP User PIN will not erase keys but will lock after 3 failed attempts.${RESET}"
+                ykman openpgp change-pin
+                ;;
+            2)
+                echo -e "${CYAN}Changing the Admin PIN requires the current Admin PIN.${RESET}"
+                ykman openpgp change-admin-pin
+                ;;
+            3)
+                echo -e "${RED}⚠️ Resetting OpenPGP will erase all keys. This cannot be undone.${RESET}"
+                read -rp "Are you sure you want to proceed? (y/N): " confirm
+                if [[ $confirm =~ ^[Yy]$ ]]; then
+                    ykman openpgp reset
+                fi
+                ;;
+            4)
+                break
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid option. Please try again.${RESET}"
+                sleep 1
+                ;;
+        esac
+    done
+}
