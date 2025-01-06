@@ -11,7 +11,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utilities/loader.sh"
 #####                         SSH Management                               #####
 ################################################################################
 
-
 # Manage IP Config Table
 manage_ipv6_ssh_config() {
     mkdir -p "$(dirname "$IP_CONFIG_FILE")"
@@ -75,6 +74,65 @@ manage_ipv6_ssh_config() {
         sleep 1
         ;;
     esac
+}
+
+# Select Key from List to Use for SSH Config 
+select_key_from_list() {
+    keys=($(ls -1 "$SSH_DIR" 2>/dev/null))
+
+    if [ ${#keys[@]} -eq 0 ]; then
+        log "ERROR" "No files found in $SSH_DIR."
+        echo -e "${RED}❌ No files found in $SSH_DIR.${RESET}"
+        return 1
+    fi
+
+    echo "Select a file to import to YubiKey (keys, certs, etc.):"
+    select key_path in "${keys[@]}" "Cancel"; do
+        file_count=${#keys[@]}
+        if [[ "$REPLY" =~ ^[0-9]+$ && "$REPLY" -ge 1 && "$REPLY" -le "$file_count" ]]; then
+            selected_file="${keys[$((REPLY - 1))]}"
+            full_key_path="$SSH_DIR/$selected_file"
+            log "INFO" "Selected file: $full_key_path"
+
+            # Handle PEM keys
+            if [[ "$selected_file" == *.pem ]]; then
+                # Validate the PEM key before proceeding
+                if openssl rsa -in "$full_key_path" -check &>/dev/null; then
+                    pkcs12="${full_key_path%.pem}.p12"
+                    openssl pkcs12 -export -in "$full_key_path" -out "$pkcs12" -nocerts -passout pass:"" 2>/tmp/openssl_error.log
+
+                    # Explicit check if the file was created
+                    if [ -s "$pkcs12" ]; then
+                        import_key_to_yubikey "$pkcs12"
+                        key_path="$pkcs12"
+                        echo -e "${GREEN}✅ Imported and selected file: $selected_file${RESET}"
+                        log "INFO" "✅ Imported and selected .pem key: $selected_file"
+                    else
+                        log "ERROR" "Failed to convert $selected_file to PKCS#12."
+                        cat /tmp/openssl_error.log
+                        echo -e "${RED}❌ Conversion of $selected_file to PKCS#12 failed.${RESET}"
+                        key_path=""
+                    fi
+                else
+                    log "ERROR" "Invalid .pem file: $selected_file."
+                    echo -e "${RED}❌ $selected_file is not a valid .pem key.${RESET}"
+                fi
+            else
+                # Handle non-pem keys (FIDO, RSA, etc.)
+                log "INFO" "Selected non-pem key: $selected_file"
+                key_path="$full_key_path"
+                echo -e "${GREEN}✅ Key selected: $selected_file${RESET}"
+            fi
+            break
+        elif [ "$REPLY" -eq $((file_count + 1)) ]; then
+            log "INFO" "Cancelled."
+            echo -e "${YELLOW}⚠️  Operation canceled.${RESET}"
+            break
+        else
+            log "WARN" "Invalid option selected: $REPLY"
+            echo -e "${RED}❌ Invalid option. Try again.${RESET}"
+        fi
+    done
 }
 
 # Start SSH Session Using Stored IPv6 Configurations

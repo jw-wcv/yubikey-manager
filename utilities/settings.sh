@@ -63,16 +63,21 @@ factory_reset_yubikey() {
         ykman config mode fido+ccid
         ykman piv reset
         ykman fido reset
+        ykman piv objects import ccc /dev/null
+        ykman piv objects import chuid /dev/null
         # ykman otp reset
         ykman openpgp reset
         ykman oath reset
         log "INFO" "🧹 YubiKey has been reset to factory defaults."
+        sudo killall -HUP pcscd scardservicesd
+        log "INFO" "🔄 Smart card services restarted."
+
     else
         log "INFO" "Factory reset cancelled."
     fi
 }
 
-# Backup SSH, YubiKey configuration, and PGP keys
+# Backup SSH, YubiKey configuration, and PGP keys -- this needs a fix to use the KEY DIR
 backup_configuration() {
     mkdir -p "$BACKUP_DIR"
     mkdir -p "$KEY_DIR"
@@ -111,8 +116,7 @@ backup_configuration() {
     log "INFO" "⚠️  Reminder: FIDO2 keys cannot be backed up directly. Ensure a second YubiKey is enrolled as a backup."
 }
 
-
-# Restore latest backup configuration and PGP keys
+# Restore latest backup configuration and PGP keys -- this needs a fix to use the KEY DIR
 restore_configuration() {
     local latest_backup
     latest_backup=$(ls -t "$BACKUP_DIR" | head -n 1)
@@ -143,7 +147,6 @@ restore_configuration() {
 
     log "INFO" "✅ PGP keys imported successfully. Run 'gpg --list-keys' to verify."
 }
-
 
 
 
@@ -283,58 +286,55 @@ remove_smart_card() {
 
 # Main Function - Configure Smart Cards
 configure_smart_cards() {
-    echo "--------------------------------------"
-    echo "  🛡️  Smart Card Configuration Manager  "
-    echo "--------------------------------------"
-    echo "1) View Smart Cards (sc_auth identities)"
-    echo "2) Add Smart Card (Pair)"
-    echo "3) Remove Smart Card (Unpair)"
-    echo "4) Exit"
-    echo ""
+    while true; do
+        echo "--------------------------------------"
+        echo "  🛡️  Smart Card Configuration Manager  "
+        echo "--------------------------------------"
+        echo "1) View Smart Cards (sc_auth identities)"
+        echo "2) Add Smart Card (Pair)"
+        echo "3) Remove Smart Card (Unpair)"
+        echo "4) Back to Main Menu"
+        echo ""
 
-    read -p "Select an option [1-4]: " choice
+        read -p "Select an option [1-4]: " choice
 
-    case $choice in
-        1) # Attempt to pair with specified hash
-        sudo sc_auth pair -u $USER -h "$public_key_hash"
-            view_smart_cards
-            ;;
-        2)
-            add_smart_card
-            ;;
-        3)
-            remove_smart_card
-            ;;
-        4)
-            log "INFO" "❌ Exiting smart card configuration."
-            echo "Goodbye!"
-            exit 0
-            ;;
-        *)
-            log "WARN" "⚠️  Invalid option selected."
-            echo "Invalid option. Please try again."
-            ;;
-    esac
+        case $choice in
+            1)
+                sudo sc_auth pair -u $USER -h "$public_key_hash"
+                view_smart_cards
+                ;;
+            2)
+                add_smart_card
+                ;;
+            3)
+                remove_smart_card
+                ;;
+            4)
+                log "INFO" "❌ Returning to main menu."
+                break
+                ;;
+            *)
+                log "WARN" "⚠️  Invalid option selected."
+                echo "Invalid option. Please try again."
+                ;;
+        esac
+    done
 }
+
+
 
 ################################################################################
 #####                        FileVault Config                              #####
 ################################################################################
 
-# Enable Full Disk Encryption
+# Enable Full Disk Encryption  -- INCOMPLETE -- WHAT IS MANGEMENT KEY BEING USED FOR? WHY NOT JUST USE EXISTING KEY IF IT EXISTS?
 enable_full_disk_encryption() {
     mkdir -p "$KEY_DIR"
 
     log "INFO" "🔒 Enabling Full Disk Encryption with YubiKey..."
 
     # Fetch management key dynamically
-    local management_key
-    management_key=$(jq -r '.management_key' "$KEY_DIR/../data/yubi_config.json" 2>/dev/null)
-    if [[ -z "$management_key" || "$management_key" == "null" ]]; then
-        log "ERROR" "❌ Management key not found. Configure YubiKey first."
-        echo "Error: Management key not found. Cannot proceed."
-        return
-    fi
+    local management_key=$(get_management_key)
 
     # Generate Key Pair in Slot 9d (Key Management)
     log "INFO" "🔑 Generating Key Management key in YubiKey slot 9d..."
@@ -399,7 +399,7 @@ enable_full_disk_encryption() {
     echo "Deferred enablement is active. Reboot required to complete encryption."
 }
 
-# Disable Full Disk Encryption 
+# Disable Full Disk Encryption
 disable_full_disk_encryption() {
     log "INFO" "🔓 Disabling Full Disk Encryption with YubiKey..."
 
@@ -554,16 +554,16 @@ create_plist_file() {
 EOF
 
     # Secure the plist file
-    chmod 600 "$PLIST_PATH"
     log "INFO" "✅ Plist file created at $PLIST_PATH with secure permissions."
     echo "Plist file created successfully at $PLIST_PATH."
 
     # Save the Recovery Key to a separate file for storage
-    echo "$recovery_key" > "$RECOVERY_KEY_FILE"
-    chmod 600 "$RECOVERY_KEY_FILE"
+    echo "$recovery_key" > "$RECOVERY_KEY_FILE"   
     log "INFO" "🔑 Recovery Key saved to $RECOVERY_KEY_FILE. Store it securely."
     echo "Recovery Key saved to $RECOVERY_KEY_FILE. Please store it securely."
 }
+
+
 
 ################################################################################
 #####                        OpenPGP Config                                #####
@@ -617,11 +617,6 @@ configureGPG() {
         mkdir -p ~/.gnupg
     fi
 
-    log "Fixing ownership and permissions of ~/.gnupg..."
-    sudo chown -R $USER ~/.gnupg
-    sudo chmod 700 ~/.gnupg
-    sudo chmod 600 ~/.gnupg/* || log "No files to update permissions on."
-
     # Configure pinentry for macOS to avoid passphrase prompt errors
     log "Configuring pinentry for macOS..."
     echo "pinentry-program /opt/homebrew/bin/pinentry-mac" > ~/.gnupg/gpg-agent.conf
@@ -653,35 +648,224 @@ configureGPG() {
 
 # Manage OpenPGP Functions Menu
 manage_openpgp_keys() {
-    echo "--------------------------------------"
-    echo "  🔐 OpenPGP Configuration Manager     "
-    echo "--------------------------------------"
-    echo "1) Setup YubiKey for OpenPGP (Generate Keys)"
-    echo "2) Configure GPG Environment"
-    echo "3) Exit"
-    echo ""
+    while true; do
+        echo "--------------------------------------"
+        echo "  🔐 OpenPGP Configuration Manager     "
+        echo "--------------------------------------"
+        echo "1) Setup YubiKey for OpenPGP (Generate Keys)"
+        echo "2) Configure GPG Environment"
+        echo "3) Back to Main Menu"
+        echo ""
 
-    read -rp "Select an option [1-3]: " choice
+        read -rp "Select an option [1-3]: " choice
 
-    case $choice in
-        1)
-            log "INFO" "🔑 Starting OpenPGP setup on YubiKey..."
-            setup_openpgp_yubikey
-            ;;
-        2)
-            log "INFO" "🔄 Configuring GPG environment and permissions..."
-            configureGPG || log "ERROR" "❌ GPG configuration failed. Please check permissions and try again."
-            ;;
-        3)
-            log "INFO" "❌ Exiting OpenPGP configuration manager."
-            echo "Goodbye!"
-            exit 0
-            ;;
-        *)
-            log "WARN" "⚠️ Invalid option selected."
-            echo "Invalid option. Please try again."
-            ;;
-    esac
+        case $choice in
+            1)
+                log "INFO" "🔑 Starting OpenPGP setup on YubiKey..."
+                setup_openpgp_yubikey
+                ;;
+            2)
+                log "INFO" "🔄 Configuring GPG environment and permissions..."
+                configureGPG || log "ERROR" "❌ GPG configuration failed. Please check permissions and try again."
+                ;;
+            3)
+                log "INFO" "❌ Returning to main menu."
+                break
+                ;;
+            *)
+                log "WARN" "⚠️ Invalid option selected."
+                echo "Invalid option. Please try again."
+                ;;
+        esac
+    done
 }
 
 
+
+################################################################################
+#####                    Permissions Config                                #####
+################################################################################
+
+# Detect platform
+detect_platform() {
+    uname_out="$(uname -s)"
+    case "${uname_out}" in
+        Linux*)     platform=linux;;
+        Darwin*)    platform=mac;;
+        *)          platform="unknown"
+    esac
+}
+
+# Get ownership (user:group) and permissions based on platform
+get_ownership() {
+    if [ "$platform" == "mac" ]; then
+        stat -f "%u:%g" "$1"
+    else
+        stat -c "%U:%G" "$1"
+    fi
+}
+
+# Get file and directory prems 
+get_permissions() {
+    if [ "$platform" == "mac" ]; then
+        stat -f "%A" "$1"
+    else
+        stat -c "%a" "$1"
+    fi
+}
+
+# Ensure permissions are correct before proceeding
+fix_permissions() {
+    log "🔧 Fixing permissions for .ssh, GnuPG, and YubiKey directories..."
+    
+    # Detect platform
+    detect_platform
+    
+    if [ "$platform" == "unknown" ]; then
+        log "❌ Unsupported platform: $uname_out"
+        exit 1
+    fi
+    
+    # Normalize paths to avoid double slashes
+    projects_dir=~/Documents/Projects
+    projects_dir="${projects_dir%/}"  # Remove trailing slash
+
+    yubikey_manager_dir="$projects_dir/yubikey-manager"
+    yubikey_resources="$yubikey_manager_dir/resources"
+    yubikey_keys="$yubikey_resources/keys"
+
+    # Debugging Paths
+    log "Checking YubiKey Manager Path: $yubikey_manager_dir"
+    log "Checking YubiKey Resources Path: $yubikey_resources"
+    log "Checking YubiKey Keys Path: $yubikey_keys"
+
+    # Set ownership to user and staff group for SSH and Projects
+    if [ "$platform" == "mac" ]; then
+        staff_gid=20  # Hardcoded GID for staff on macOS
+    else
+        staff_gid=$(getent group staff | cut -d: -f3)
+    fi
+
+    # Fix /tmp/ permissions
+    if [ "$(get_permissions /tmp)" != "1777" ]; then
+        sudo chmod 1777 /tmp
+        log "✔ Permissions for /tmp set to 1777 (world-writable with sticky bit)"
+    else
+        log "ℹ Permissions for /tmp already set correctly"
+    fi
+
+    if [ "$(get_ownership /tmp)" != "0:0" ]; then
+        sudo chown root:wheel /tmp
+        log "✔ Ownership for /tmp set to root:wheel"
+    else
+        log "ℹ Ownership for /tmp already correct"
+    fi
+    
+    # Fix ownership for .ssh
+    if [ "$(get_ownership ~/.ssh)" != "$(id -u):$staff_gid" ]; then
+        sudo chown -R $(whoami):staff ~/.ssh
+        log "✔ Ownership for ~/.ssh set to $(whoami):staff"
+    else
+        log "ℹ Ownership for ~/.ssh already correct"
+    fi
+
+    # Fix ownership for Projects directory
+    if [ "$(get_ownership "$projects_dir")" != "$(id -u):$staff_gid" ]; then
+        sudo chown -R $(whoami):staff "$projects_dir"
+        log "✔ Ownership for ~/Documents/Projects set to $(whoami):staff"
+    else
+        log "ℹ Ownership for ~/Documents/Projects already correct"
+    fi
+
+    # Secure .ssh directory
+    if [ "$(get_permissions ~/.ssh)" != "770" ]; then
+        chmod 770 ~/.ssh
+        log "✔ Permissions for ~/.ssh set to 770"
+    else
+        log "ℹ Permissions for ~/.ssh already set correctly"
+    fi
+
+    if [ ! -g ~/.ssh ]; then
+        sudo chmod g+s ~/.ssh
+        log "✔ Group sticky bit set for ~/.ssh"
+    else
+        log "ℹ Group sticky bit already set for ~/.ssh"
+    fi
+
+    # Apply recursive permissions for Projects directory
+    if [ "$(get_permissions "$projects_dir")" != "770" ]; then
+        chmod -R 770 "$projects_dir"
+        log "✔ Recursive permissions for ~/Documents/Projects set to 770"
+    else
+        log "ℹ Permissions for ~/Documents/Projects already set correctly"
+    fi
+
+    if [ ! -g "$projects_dir" ]; then
+        sudo chmod g+s "$projects_dir"
+        log "✔ Group sticky bit set for ~/Documents/Projects"
+    else
+        log "ℹ Group sticky bit already set for ~/Documents/Projects"
+    fi
+
+    # Fix permissions for yubikey-manager/resources
+    if [ -d "$yubikey_resources" ]; then
+        if [ "$(get_permissions "$yubikey_resources")" != "770" ]; then
+            sudo chmod -R 770 "$yubikey_resources"
+            log "✔ Recursive permissions for yubikey-manager/resources set to 770"
+        else
+            log "ℹ Permissions for yubikey-manager/resources already set correctly"
+        fi
+    else
+        log "❌ Path not found: $yubikey_resources"
+    fi
+
+    if [ -d "$yubikey_keys" ]; then
+        if [ "$(get_permissions "$yubikey_keys")" != "775" ]; then
+            sudo chmod 775 "$yubikey_keys"
+            log "✔ Permissions for yubikey-manager/resources/keys set to 775"
+        else
+            log "ℹ Permissions for yubikey-manager/resources/keys already set correctly"
+        fi
+    else
+        log "❌ Path not found: $yubikey_keys"
+    fi
+
+    # Secure SSH key files
+    for file in ~/.ssh/id_*; do
+        if [ -f "$file" ] && [ "$(get_permissions "$file")" != "660" ]; then
+            chmod 660 "$file"
+            log "✔ Permissions for SSH private key $file set to 660"
+        else
+            log "ℹ Permissions for $file already set correctly or file does not exist"
+        fi
+    done
+
+    if [ "$(get_permissions ~/.ssh/known_hosts)" != "660" ]; then
+        chmod 660 ~/.ssh/known_hosts
+        log "✔ Permissions for ~/.ssh/known_hosts set to 660"
+    else
+        log "ℹ Permissions for ~/.ssh/known_hosts already set correctly"
+    fi
+
+    if [ "$(get_permissions ~/.ssh/config)" != "660" ]; then
+        chmod 660 ~/.ssh/config
+        log "✔ Permissions for ~/.ssh/config set to 660"
+    else
+        log "ℹ Permissions for ~/.ssh/config already set correctly"
+    fi
+
+    # GnuPG Directory Permissions
+    if [ "$(get_ownership ~/.gnupg)" != "$(id -u):$staff_gid" ]; then
+        sudo chown -R $(whoami):staff ~/.gnupg
+        log "✔ Ownership for ~/.gnupg set to $(whoami):staff"
+    else
+        log "ℹ Ownership for ~/.gnupg already correct"
+    fi
+
+    if [ "$(get_permissions ~/.gnupg)" != "770" ]; then
+        sudo chmod 770 ~/.gnupg
+        log "✔ Permissions for ~/.gnupg set to 770"
+    else
+        log "ℹ Permissions for ~/.gnupg already set correctly"
+    fi
+}

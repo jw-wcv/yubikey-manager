@@ -19,6 +19,8 @@ UTILS=(
     "keys.sh"
     "general.sh"
     "art.sh"
+    "rsa.sh"
+    "fido.sh"
 )
 
 # Source each utility script explicitly

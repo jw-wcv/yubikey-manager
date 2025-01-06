@@ -107,12 +107,10 @@ EOF
 
     # Save updated config to file
     echo "$updated_config" > "$JSON_CONFIG_PATH"
-    chmod 600 "$JSON_CONFIG_PATH"
     log "INFO" "✅ Management key, PIN, and PUK saved to $JSON_CONFIG_PATH"
 
     # Backup the management key to a hidden file
     echo "$management_key" > "$KEY_BACKUP_PATH"
-    chmod 600 "$KEY_BACKUP_PATH"
     log "INFO" "✅ Management key backed up to $KEY_BACKUP_PATH"
 }
 
@@ -132,8 +130,9 @@ configure_pin() {
 }
 
 
+
 ################################################################################
-#####                            SSH Config                                #####
+#####                          SSH Config Prep                             #####
 ################################################################################
 
 # Full SSH Setup for YubiKey (FIDO2-based configuration)
@@ -175,15 +174,15 @@ setup_yubikey_for_ssh() {
 # Setup FIDO2 SSH Configuration
 setup_fido2_ssh() {
     generate_fido2_ssh_key
-    deploy_fido2_public_key
-    configure_fido2_ssh_config
+  #  deploy_fido2_public_key
+  #  configure_fido2_ssh_config
 }
 
 # Setup ssh-rsa via PIV SSH Configuration
 setup_rsa_piv_ssh() {
-    generate_rsa_piv_key
-    deploy_rsa_piv_public_key
-    configure_rsa_piv_ssh_config
+    manage_rsa_keys
+  #  deploy_rsa_piv_public_key
+  #  configure_rsa_piv_ssh_config
 }
 
 # Configure SSH to Use FIDO2 SSH Key
@@ -231,6 +230,7 @@ EOL
         log "INFO" "🔧 Added PKCS11Provider configuration to SSH config."
     fi
 }
+
 
 
 ################################################################################

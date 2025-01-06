@@ -94,30 +94,26 @@ setup_menu() {
         echo -e "${CYAN}${BOLD}🛠️  YubiKey Manager - Setup${RESET}"
         echo -e "${MAGENTA}${BOLD}Setup Menu:${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
-        echo -e "${YELLOW}1) Install Dependencies${RESET}"
-        echo -e "${YELLOW}2) Configure YubiKey (PIN, PUK, Management Key)${RESET}"
-        echo -e "${YELLOW}3) Configure Yubikey for SSH${RESET}"
-        echo -e "${YELLOW}4) 🚀 Ready Check 🚀${RESET}"
-        echo -e "${YELLOW}5) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}1) Configure YubiKey (PIN, PUK, Management Key)${RESET}"
+        echo -e "${YELLOW}2) Configure Yubikey for SSH${RESET}"
+        echo -e "${YELLOW}3) 🚀 Ready Check 🚀${RESET}"
+        echo -e "${YELLOW}4) Back to Main Menu${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-5]: ${RESET}")" setup_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-4]: ${RESET}")" setup_choice
 
         case $setup_choice in
             1)
-                check_dependencies
-                ;;
-            2)
                 configure_yubikey
                 ;;
-            3)
+            2)
                 setup_yubikey_for_ssh
                 ;;
-            4)
+            3)
                 ready_check
                 ;;
-            5)
+            4)
                 break
                 ;;
             *)
@@ -142,42 +138,34 @@ keys_management_menu() {
         echo -e "${CYAN}${BOLD}🛠️  YubiKey Manager - Keys Management${RESET}"
         echo -e "${MAGENTA}${BOLD}Keys Management Menu:${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
-        echo -e "${YELLOW}1) Generate FIDO2 SSH Key${RESET}"
-        echo -e "${YELLOW}2) Generate ssh-rsa PIV Key${RESET}"
-        echo -e "${YELLOW}3) Package PKCS12 PIV Key${RESET}"
-        echo -e "${YELLOW}4) Import SSH Key${RESET}"
-        echo -e "${YELLOW}5) Export SSH Keys${RESET}"
-        echo -e "${YELLOW}6) List SSH Keys${RESET}"
-        echo -e "${YELLOW}7) Remove SSH Key from YubiKey${RESET}"
-        echo -e "${YELLOW}8) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}1) List SSH Keys${RESET}"
+        echo -e "${YELLOW}2) Manage FIDO2 Key${RESET}"
+        echo -e "${YELLOW}3) Manage RSA/PIV Keys${RESET}"
+        echo -e "${YELLOW}4) Export SSH Keys${RESET}"
+        echo -e "${YELLOW}5) Remove SSH Key from YubiKey${RESET}"
+        echo -e "${YELLOW}6) Back to Main Menu${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-8]: ${RESET}")" keys_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-6]: ${RESET}")" keys_choice
 
         case $keys_choice in
             1)
-                setup_fido2_ssh
-                ;;
-            2)
-                setup_rsa_piv_ssh
-                ;;
-            3)
-                convert_pem_to_pkcs12
-                ;;    
-            4)
-                select_key_from_list
-                ;;
-            5)
-                export_ssh_public_key
-                ;;
-            6)
                 list_keys
                 ;;
-            7)
+            2)
+                setup_fido2_ssh
+                ;;
+            3)
+                setup_rsa_piv_ssh
+                ;;
+            4)
+                export_ssh_public_key
+                ;;
+            5)
                 remove_key_from_yubikey
                 ;;
-            8)
+            6)
                 break
                 ;;
             *)
@@ -244,15 +232,16 @@ settings_menu() {
         echo -e "${YELLOW}=========================================${RESET}"
         echo -e "${YELLOW}1) Backup Configuration${RESET}"
         echo -e "${YELLOW}2) Restore Configuration${RESET}"
-        echo -e "${YELLOW}3) Factory Reset YubiKey${RESET}"
-        echo -e "${YELLOW}4) Manage OSX Disk Encryption${RESET}"
-        echo -e "${YELLOW}5) Manage Smart Cards${RESET}"  
-        echo -e "${YELLOW}6) Manage OpenPGP Keys${RESET}"
-        echo -e "${YELLOW}7) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}3) Manage OSX Disk Encryption${RESET}"
+        echo -e "${YELLOW}4) Manage Smart Cards${RESET}"  
+        echo -e "${YELLOW}5) Manage OpenPGP Keys${RESET}"
+        echo -e "${YELLOW}6) Factory Reset YubiKey${RESET}"
+        echo -e "${YELLOW}7) Reset ~/.SSH+ Perms${RESET}"
+        echo -e "${YELLOW}8) Back to Main Menu${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-7]: ${RESET}")" settings_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-8]: ${RESET}")" settings_choice
 
         case $settings_choice in
             1)
@@ -262,18 +251,21 @@ settings_menu() {
                 restore_configuration
                 ;;
             3)
-                factory_reset_yubikey
-                ;;
-            4)
                 manage_disk_encryption
                 ;;
+            4)
+                configure_smart_cards
+                ;;
             5)
-                configure_smart_cards  
+                manage_openpgp_keys  
                 ;;
             6)
-                manage_openpgp_keys
+                factory_reset_yubikey
                 ;;
             7)
+                fix_permissions
+                ;;
+            8)
                 break
                 ;;
             *)
