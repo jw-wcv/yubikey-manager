@@ -1,4 +1,7 @@
 # Ignore environment and sensitive files
 # .env
-/resources
+#/resources
+/resources/keys
+/resources/data
+/resources/logs
 /artifacts

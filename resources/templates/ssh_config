@@ -1,0 +1,50 @@
+Host *
+    PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so
+    ForwardAgent no
+    ForwardX11 no
+    PasswordAuthentication no
+    ChallengeResponseAuthentication no
+
+    # Prefer FIDO2 if available
+    IdentityFile ~/.ssh/id_ecdsa_sk
+    IdentityFile ~/.ssh/id_ecdsa_sk_rk  # Fallback resident key
+
+    IdentitiesOnly no  # Try all identities (FIDO2 + YubiKey PIV)
+
+    # KEX Algorithms - Strong and modern key exchanges
+    KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256
+
+    # Ciphers - Strong ciphers only
+    Ciphers aes256-gcm@openssh.com,aes128-gcm@openssh.com,chacha20-poly1305@openssh.com
+
+    # Host Key Algorithms - Exclude legacy DSA, use modern algorithms
+    HostKeyAlgorithms rsa-sha2-512,rsa-sha2-256,ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521
+
+    # Session Management
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+
+    Compression no
+    StrictHostKeyChecking ask
+    UserKnownHostsFile ~/.ssh/known_hosts
+
+    TCPKeepAlive no
+    PermitLocalCommand no
+    RekeyLimit 1G 1h
+    LogLevel VERBOSE
+
+Host Battlestation
+    HostName 2a01:240:ad00:2501:3:efb7:da33:32b1
+    User root
+    IdentityFile ~/.ssh/id_ecdsa_sk
+    IdentityFile ~/.ssh/id_ecdsa_sk_rk  # Fallback resident key
+    AddressFamily inet6
+    IdentitiesOnly yes
+
+Host Battlestation_PIV
+    HostName 2a01:240:ad00:2501:3:efb7:da33:32b1
+    User root
+    PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so
+    AddressFamily inet6
+    IdentitiesOnly yes
+

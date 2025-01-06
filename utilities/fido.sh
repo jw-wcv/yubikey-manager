@@ -124,9 +124,13 @@ export_fido2_public_key() {
         log "INFO" "✅ FIDO2 resident keys successfully retrieved and saved to $SSH_DIR."
         
         # Copy the new resident keys from ~/.ssh to KEY_DIR
-        cp "$SSH_DIR/id_ecdsa_sk_rk" "$KEY_DIR/" 2>/dev/null
-        cp "$SSH_DIR/id_ecdsa_sk_rk.pub" "$KEY_DIR/" 2>/dev/null
-        log "INFO" "🔑 Copied FIDO2 SSH Key to $KEY_DIR: id_ecdsa_sk_rk"
+        for keyfile in id_ecdsa_sk_rk id_ecdsa_sk; do
+            if [ -f "$SSH_DIR/$keyfile" ]; then
+                cp "$SSH_DIR/$keyfile" "$KEY_DIR/" 2>/dev/null
+                cp "$SSH_DIR/$keyfile.pub" "$KEY_DIR/" 2>/dev/null
+                log "INFO" "🔑 Copied FIDO2 SSH Key to $KEY_DIR: $keyfile"
+            fi
+        done
     else
         log "INFO" "No FIDO2 resident keys found on YubiKey."
     fi
@@ -137,7 +141,7 @@ export_fido2_public_key() {
     log "INFO" "🔍 Checking for misplaced FIDO2 SSH keys in project directory ($PROJECT_ROOT):"
     
     # Explicitly check for the specific files
-    for keyfile in id_ecdsa_sk_rk id_ecdsa_sk_rk.pub; do
+    for keyfile in id_ecdsa_sk_rk id_ecdsa_sk id_ecdsa_sk_rk.pub id_ecdsa_sk.pub; do
         if [ -f "$PROJECT_ROOT/$keyfile" ]; then
             # Move key to ~/.ssh/
             mv "$PROJECT_ROOT/$keyfile" "$SSH_DIR/" 2>/dev/null
@@ -154,7 +158,7 @@ export_fido2_public_key() {
 
     for dir in "$SSH_DIR" "$KEY_DIR"; do
         if [ -d "$dir" ]; then
-            fido2_keys=$(ls "$dir"/*_sk 2>/dev/null)
+            fido2_keys=$(ls "$dir"/*_sk "$dir"/*_sk_rk 2>/dev/null)
 
             if [ -z "$fido2_keys" ]; then
                 log "INFO" "No FIDO2 SSH keys found in $dir."

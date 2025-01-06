@@ -190,14 +190,14 @@ configure_fido2_ssh_config() {
     log "INFO" "⚙️ Configuring SSH to use FIDO2 SSH key..."
 
     # Backup existing SSH config
-    cp "$SSH_CONFIG" "${SSH_CONFIG}.backup" 2>/dev/null
+    cp "$SSH_CONFIG_FILE" "${SSH_CONFIG_FILE}.backup" 2>/dev/null
 
     # Check if FIDO2 IdentityFile is already set
-    if grep -q "IdentityFile $SSH_KEY" "$SSH_CONFIG"; then
+    if grep -q "IdentityFile $SSH_KEY" "$SSH_CONFIG_FILE"; then
         log "INFO" "✅ SSH config already references the FIDO2 SSH key."
     else
         # Add configuration for FIDO2 key
-        cat <<EOL >> "$SSH_CONFIG"
+        cat <<EOL >> "$SSH_CONFIG_FILE"
 
 # YubiKey FIDO2 SSH Key
 Host *
@@ -213,14 +213,14 @@ configure_rsa_piv_ssh_config() {
     log "INFO" "⚙️ Configuring SSH to use ssh-rsa via PIV..."
 
     # Backup existing SSH config
-    cp "$SSH_CONFIG" "${SSH_CONFIG}.backup" 2>/dev/null
+    cp "$SSH_CONFIG_FILE" "${SSH_CONFIG_FILE}.backup" 2>/dev/null
 
     # Check if PKCS11Provider is already set
-    if grep -q "PKCS11Provider /opt/homebrew/lib/libykcs11.dylib" "$SSH_CONFIG"; then
+    if grep -q "PKCS11Provider /opt/homebrew/lib/libykcs11.dylib" "$SSH_CONFIG_FILE"; then
         log "INFO" "✅ PKCS11Provider already configured in SSH config."
     else
         # Add configuration for ssh-rsa via PIV
-        cat <<EOL >> "$SSH_CONFIG"
+        cat <<EOL >> "$SSH_CONFIG_FILE"
 
 # YubiKey ssh-rsa via PIV
 Host *

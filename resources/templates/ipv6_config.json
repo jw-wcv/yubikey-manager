@@ -1,0 +1,12 @@
+[
+  {
+    "server": "Battlestation",
+    "ipv6": "2a01:240:ad00:2501:3:efb7:da33:32b1",
+    "key": "~/.ssh/id_rsa"
+  },
+  {
+    "server": "Battlestation_PIV",
+    "ipv6": "2a01:240:ad00:2501:3:efb7:da33:32b1",
+    "key": "yubikey"
+  }
+]

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-# 🐋 Whale Connected - YubiKey Manager v6.0 - Enhanced UI
+# 🐋 Whale Connected - YubiKey & SSH Manager
 # =============================================================================
 
 
@@ -200,7 +200,7 @@ ssh_operations_menu() {
 
         case $ssh_choice in
             1)
-                manage_ipv6_ssh_config
+                main_ssh_menu
                 ;;
             2)
                 start_selected_ssh_session

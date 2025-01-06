@@ -1,0 +1,11 @@
+# Key for admin access (workstation 1)
+ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAvWqD...xMZ user1@workstation1.local
+
+# Key for deployment server
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKsExH...F9A user2@deploy-server.local
+
+# YubiKey FIDO2 SSH key
+sk-ecdsa-sha2-nistp256@openssh.com AAAAE2VjZHNhLX...kPA user3@secure-laptop
+
+# Backup key for recovery
+ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA7sFrM...lQ9 user4@backup.local

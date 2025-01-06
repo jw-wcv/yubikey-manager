@@ -6,28 +6,408 @@
 # Dynamically load all utility scripts and environment variables
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utilities/loader.sh"
 
+# =============================================================================
+# Initialize SSH Artifacts if They Don't Exist
+# =============================================================================
+initialize_ssh_artifacts() {
+    mkdir -p "$DATA_DIR"
 
-################################################################################
-#####                         SSH Management                               #####
-################################################################################
+    if [ ! -f "$SSH_CONFIG_ARTIFACT" ]; then
+        echo "Initializing SSH config artifact from template..."
+        cp "$SSH_CONFIG_TEMPLATE" "$SSH_CONFIG_ARTIFACT"
+    fi
 
+    if [ ! -f "$IPV6_ARTIFACT" ]; then
+        echo "Initializing IPv6 config artifact from template..."
+        cp "$IPV6_TEMPLATE" "$IPV6_ARTIFACT"
+    fi
+}
+
+# =============================================================================
+# Sync SSH Config with Artifact (Bidirectional) and Update IPv6 Artifact
+# =============================================================================
+sync_ssh_with_artifact() {
+    local sync_needed=false
+    missing_in_ssh=()
+    missing_in_artifact=()
+
+    # Extract valid hosts by parsing ~/.ssh/config
+    local ssh_hosts=()
+    while IFS= read -r line; do
+        # Capture valid hosts excluding '*' or unrelated patterns, and skip comments
+        if [[ "$line" =~ ^Host[[:space:]]+([^*[:space:]]+)$ ]] && [[ ! "$line" =~ ^# ]]; then
+            ssh_hosts+=("${BASH_REMATCH[1]}")
+        fi
+    done < "$SSH_CONFIG_FILE"
+
+    # Extract hosts from artifact, excluding unwanted entries
+    local artifact_hosts=($(jq -r '.[] | select(.server != "artifacts" and .server != "key_manager.sh" and .server != "resources" and .server != "utilities") | .server' "$IPV6_ARTIFACT"))
+
+    # Compare Artifact Hosts with SSH Config
+    for host in "${artifact_hosts[@]}"; do
+        if ! printf "%s\n" "${ssh_hosts[@]}" | grep -qx "$host"; then
+            missing_in_ssh+=("$host")
+            sync_needed=true
+        fi
+    done
+
+    # Compare SSH Config Hosts with Artifact
+    for host in "${ssh_hosts[@]}"; do
+        if ! printf "%s\n" "${artifact_hosts[@]}" | grep -qx "$host"; then
+            missing_in_artifact+=("$host")
+            sync_needed=true
+        fi
+    done
+
+    # Display Discrepancies
+    if [ "$sync_needed" = true ]; then
+        echo -e "\n⚠️ Discrepancies Found:"
+        [ ${#missing_in_ssh[@]} -gt 0 ] && echo "🟩 Missing in SSH Config (from artifact): ${missing_in_ssh[*]}"
+        [ ${#missing_in_artifact[@]} -gt 0 ] && echo "🟧 Missing in Artifact (from SSH Config): ${missing_in_artifact[*]}"
+        
+        echo -e "\nOptions:"
+        echo "1) Sync Missing Entries"
+        echo "2) Overwrite Artifact with SSH Config Hosts"
+        echo "3) Overwrite SSH Config with Artifact Hosts"
+        echo "4) Restore from ssh_config Template"
+        echo "5) Cancel"
+        read -p "Select an option: " sync_choice
+
+        case $sync_choice in
+        1) apply_sync ; update_ipv6_artifact ;; 
+        2) overwrite_artifact_with_ssh ; update_ipv6_artifact ;; 
+        3) overwrite_ssh_with_artifact ; update_ipv6_artifact ;; 
+        4) restore_ssh_from_template ;;
+        5) echo "⚠️ Sync canceled." ;;
+        *) echo "❌ Invalid choice. No changes made." ;;
+        esac
+    else
+        echo "✅ SSH Config and Artifact are in sync."
+        update_ipv6_artifact
+    fi
+}
+
+
+
+# =============================================================================
+# Apply Sync for Missing Entries (Prevent Duplicates)
+# =============================================================================
+apply_sync() {
+    for host in "${missing_in_artifact[@]}"; do
+        # Check if host already exists before adding
+        if ! jq -e --arg server "$host" '.[] | select(.server == $server)' "$IPV6_ARTIFACT" > /dev/null; then
+            jq ". += [{\"server\":\"$host\",\"ipv6\":\"\",\"key\":\"~/.ssh/id_rsa\"}]" "$IPV6_ARTIFACT" > "$IPV6_ARTIFACT.tmp" && \
+            mv "$IPV6_ARTIFACT.tmp" "$IPV6_ARTIFACT"
+            log "INFO" "✅ Added $host to artifact."
+        else
+            log "INFO" "⚠️ $host already exists in artifact. Skipping..."
+        fi
+    done
+
+    for host in "${missing_in_ssh[@]}"; do
+        # Check if host already exists in ssh_config
+        if ! grep -q "Host $host" "$SSH_CONFIG_FILE"; then
+            cat <<EOF >> "$SSH_CONFIG_FILE"
+
+Host $host
+    HostName <ipv6-address>
+    User root
+    IdentityFile ~/.ssh/id_rsa
+EOF
+            log "INFO" "✅ Added $host to SSH Config."
+        else
+            log "INFO" "⚠️ $host already exists in SSH Config. Skipping..."
+        fi
+    done
+}
+
+
+# =============================================================================
+# Update IPv6 Artifact to Reflect SSH Config (Prevent Duplicates)
+# =============================================================================
+update_ipv6_artifact() {
+    local updated_artifact=()
+    local temp_artifact_file="$IPV6_ARTIFACT.tmp"
+    
+    # Create a copy of the artifact to modify
+    jq -c '.' "$IPV6_ARTIFACT" > "$temp_artifact_file"
+
+    # Parse valid Host entries and update or add new entries
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^Host[[:space:]]+([^*]+) ]]; then
+            host="${BASH_REMATCH[1]}"
+            ipv6=$(awk -v host="$host" '$0 ~ "Host " host {found=1} found && /HostName/ {print $2; exit}' "$SSH_CONFIG_FILE")
+            [ -z "$ipv6" ] && ipv6=""  # Default to empty if no IP is found
+
+            # Remove existing entry if it exists
+            jq --arg server "$host" 'del(.[] | select(.server == $server))' "$temp_artifact_file" > "$temp_artifact_file.tmp" \
+                && mv "$temp_artifact_file.tmp" "$temp_artifact_file"
+
+            # Add updated entry
+            jq --arg server "$host" --arg ipv6 "$ipv6" --arg key "~/.ssh/id_rsa" \
+                '. += [{"server": $server, "ipv6": $ipv6, "key": $key}]' "$temp_artifact_file" > "$temp_artifact_file.tmp" \
+                && mv "$temp_artifact_file.tmp" "$temp_artifact_file"
+        fi
+    done < "$SSH_CONFIG_FILE"
+
+    # Overwrite the artifact with the updated version
+    mv "$temp_artifact_file" "$IPV6_ARTIFACT"
+    log "INFO" "✅ IPv6 artifact updated with duplicates removed and new entries added."
+}
+
+
+
+# =============================================================================
+# Overwrite Artifact with SSH Config Hosts (Preserve Global Host * Section)
+# =============================================================================
+overwrite_artifact_with_ssh() {
+    echo "⚠️ Overwriting artifact with SSH Config hosts..."
+    jq -n '[]' > "$IPV6_ARTIFACT.tmp"
+
+    # Extract 'Host *' section to preserve general settings in artifact
+    cat <<EOF > "$IPV6_ARTIFACT.tmp"
+[
+  {
+    "server": "*",
+    "ipv6": "",
+    "key": "yubikey",
+    "config": {
+      "PKCS11Provider": "/opt/homebrew/lib/opensc-pkcs11.so",
+      "ForwardAgent": "no",
+      "ForwardX11": "no",
+      "PasswordAuthentication": "no",
+      "ChallengeResponseAuthentication": "no",
+      "IdentityFile": ["~/.ssh/id_ecdsa_sk", "~/.ssh/id_ecdsa_sk_rk"],
+      "KexAlgorithms": "curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256",
+      "Ciphers": "aes256-gcm@openssh.com,aes128-gcm@openssh.com,chacha20-poly1305@openssh.com",
+      "HostKeyAlgorithms": "rsa-sha2-512,rsa-sha2-256,ssh-ed25519,ecdsa-sha2-nistp256",
+      "ServerAliveInterval": "60",
+      "ServerAliveCountMax": "3",
+      "Compression": "no",
+      "StrictHostKeyChecking": "ask",
+      "UserKnownHostsFile": "~/.ssh/known_hosts",
+      "TCPKeepAlive": "no",
+      "PermitLocalCommand": "no",
+      "RekeyLimit": "1G 1h",
+      "LogLevel": "VERBOSE"
+    }
+  }
+]
+EOF
+
+    # Parse individual host entries from SSH config
+    grep -E "^Host " "$SSH_CONFIG_FILE" | awk '{print $2}' | while read -r host; do
+        # Skip the wildcard host '*' since it's already added
+        if [[ "$host" != "*" ]]; then
+            ipv6=$(awk -v host="$host" '$0 ~ "Host " host {found=1} found && /HostName/ {print $2; exit}' "$SSH_CONFIG_FILE")
+
+            # Fallback key logic
+            if grep -A3 "^Host $host" "$SSH_CONFIG_FILE" | grep -q 'PKCS11Provider'; then
+                key="yubikey"
+            else
+                key=$(awk -v host="$host" '$0 ~ "Host " host {found=1} found && /IdentityFile/ {print $2; exit}' "$SSH_CONFIG_FILE")
+                [ -z "$key" ] && key="~/.ssh/id_rsa"
+            fi
+
+            # Construct new entry for artifact
+            new_entry="{\"server\":\"$host\",\"ipv6\":\"$ipv6\",\"key\":\"$key\"}"
+
+            # Append the entry to artifact
+            jq ". += [$new_entry]" "$IPV6_ARTIFACT.tmp" > "$IPV6_ARTIFACT.tmp.2" && \
+            mv "$IPV6_ARTIFACT.tmp.2" "$IPV6_ARTIFACT.tmp"
+        fi
+    done
+
+    # Replace the artifact with the updated version
+    mv "$IPV6_ARTIFACT.tmp" "$IPV6_ARTIFACT"
+    log "INFO" "✅ Artifact fully overwritten with SSH Config hosts and preserved Host * section."
+}
+
+
+# =============================================================================
+# Overwrite SSH Config with Artifact Hosts (Preserve Global Host * Section)
+# =============================================================================
+overwrite_ssh_with_artifact() {
+    echo "⚠️ Overwriting SSH Config with artifact hosts..."
+    cp "$SSH_CONFIG_FILE" "$SSH_CONFIG_FILE.bak"
+
+    # Preserve the global 'Host *' section at the top
+    cat <<EOF > "$SSH_CONFIG_FILE"
+Host *
+    PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so
+    ForwardAgent no
+    ForwardX11 no
+    PasswordAuthentication no
+    ChallengeResponseAuthentication no
+
+    # Prefer FIDO2 if available
+    IdentityFile ~/.ssh/id_ecdsa_sk
+    IdentityFile ~/.ssh/id_ecdsa_sk_rk  # Fallback resident key
+
+    IdentitiesOnly no  # Try all identities (FIDO2 + YubiKey PIV)
+
+    # KEX Algorithms - Strong and modern key exchanges
+    KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256
+
+    # Ciphers - Strong ciphers only
+    Ciphers aes256-gcm@openssh.com,aes128-gcm@openssh.com,chacha20-poly1305@openssh.com
+
+    # Host Key Algorithms - Exclude legacy DSA, use modern algorithms
+    HostKeyAlgorithms rsa-sha2-512,rsa-sha2-256,ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521
+
+    # Session Management
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+
+    Compression no
+    StrictHostKeyChecking ask
+    UserKnownHostsFile ~/.ssh/known_hosts
+
+    TCPKeepAlive no
+    PermitLocalCommand no
+    RekeyLimit 1G 1h
+    LogLevel VERBOSE
+EOF
+
+    # Append individual host configurations from artifact
+    jq -c '.[]' "$IPV6_ARTIFACT" | while read -r entry; do
+        server=$(echo "$entry" | jq -r '.server')
+        ipv6=$(echo "$entry" | jq -r '.ipv6')
+        key=$(echo "$entry" | jq -r '.key')
+
+        # Set fallback key based on 'key' value (PIV or FIDO)
+        if [[ "$key" == "yubikey" ]]; then
+            identity_file="PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so"
+        else
+            identity_file="IdentityFile $key"
+        fi
+
+        cat <<EOF >> "$SSH_CONFIG_FILE"
+
+Host $server
+    HostName $ipv6
+    User root
+    $identity_file
+    IdentitiesOnly yes
+EOF
+    done
+    log "INFO" "✅ SSH Config fully overwritten with artifact hosts and preserved global settings."
+}
+
+
+
+# =============================================================================
+# Restore SSH Config and Artifact from Template
+# =============================================================================
+restore_ssh_from_template() {
+    local ssh_template="$SSH_CONFIG_TEMPLATE"
+    local ipv6_template="$IPV6_TEMPLATE"
+
+    # Restore SSH Config and Artifact
+    if [ -f "$ssh_template" ]; then
+        # Overwrite actual SSH config
+        cp "$ssh_template" "$SSH_CONFIG_FILE"
+        cp "$ssh_template" ~/.ssh/config
+        
+        # Overwrite SSH config artifact (in /data)
+        cp "$ssh_template" "$SSH_CONFIG_ARTIFACT"
+        
+        log "INFO" "✅ SSH Config and artifact restored from template."
+    else
+        log "ERROR" "❌ SSH template file not found at $ssh_template."
+    fi
+
+    # Restore IPv6 Artifact Completely
+    if [ -f "$ipv6_template" ]; then
+        cp "$ipv6_template" "$IPV6_ARTIFACT"
+        log "INFO" "✅ IPv6 Artifact restored from template (fully replaced)."
+    else
+        log "ERROR" "❌ IPv6 artifact template not found at $ipv6_template."
+    fi
+}
+
+
+
+
+# =============================================================================
+# Start SSH Session Based on Artifact (Numbered Selection) - Fixed Subshell Issue
+# =============================================================================
+start_selected_ssh_session() {
+    local servers=()
+    local count=1
+
+    echo "Available Servers:"
+
+    # Populate servers array and display options without subshell
+    for entry in $(jq -c '.[]' "$IPV6_ARTIFACT"); do
+        server=$(echo "$entry" | jq -r '.server')
+        ipv6=$(echo "$entry" | jq -r '.ipv6')
+        key=$(echo "$entry" | jq -r '.key')
+
+        servers+=("$server")
+        echo "$count) $server ($ipv6) -> $key"
+        ((count++))
+    done
+
+    # Prompt for selection by number
+    read -p "Select server by number: " selection
+
+    # Validate selection
+    if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#servers[@]}" ]; then
+        selected_server="${servers[$((selection - 1))]}"
+        echo "🔐 Connecting to $selected_server..."
+        ssh "$selected_server"
+    else
+        echo "❌ Invalid selection. Please enter a valid number."
+    fi
+}
+
+
+# =============================================================================
+# Main SSH Menu
+# =============================================================================
+main_ssh_menu() {
+    while true; do
+        echo -e "\n🔧 YubiKey SSH Configuration Manager"
+        echo "1) Sync SSH Configurations"
+        echo "2) Manage SSH Config"
+        echo "3) Restore SSH Config"
+        echo "4) Return to Main Menu"
+        read -p "Select an option [1-4]: " choice
+
+        case $choice in
+        1) sync_ssh_with_artifact ;;
+        2) manage_ipv6_ssh_config ;;
+        3) restore_ssh_from_template ;;
+        4) echo "Returning to Main Menu..."; break ;;
+        *) echo "❌ Invalid option. Try again." ;;
+        esac
+    done
+}
+
+
+
+# =============================================================================
 # Manage IP Config Table with YubiKey Support
+# =============================================================================
 manage_ipv6_ssh_config() {
-    mkdir -p "$(dirname "$IP_CONFIG_FILE")"
-    touch "$IP_CONFIG_FILE"
+    mkdir -p "$(dirname "$IPV6_ARTIFACT")"
+    touch "$IPV6_ARTIFACT"
+    touch "$SSH_CONFIG_ARTIFACT"
 
     log "INFO" "🤝 Managing IPv6 SSH configurations..."
 
-    if [ -s "$IP_CONFIG_FILE" ]; then
-        cat "$IP_CONFIG_FILE" | jq
+    # Display current IPv6 configurations (visualize artifact)
+    if [ -s "$IPV6_ARTIFACT" ]; then
+        jq '.' "$IPV6_ARTIFACT"
     else
         echo "No existing configurations."
     fi
 
     echo -e "\nOptions:"
-    echo "1) Add new entry"
-    echo "2) Remove entry"
-    echo "3) Cancel"
+    echo "1) Add new IPv6 entry"
+    echo "2) Remove existing entry"
+    echo "3) Return to Main Menu"
     read -p "Select an option: " choice
 
     case $choice in
@@ -41,8 +421,8 @@ manage_ipv6_ssh_config() {
             read -p "Enter username (default: root): " user_name
             user_name=${user_name:-root}
 
-            # Prepare YubiKey SSH Config
-            cat <<EOF >> ~/.ssh/config
+            # Add entry to SSH Config
+            cat <<EOF >> "$SSH_CONFIG_FILE"
 
 Host $server_name
     HostName $ipv6_addr
@@ -51,13 +431,15 @@ Host $server_name
     AddressFamily inet${ip_version}
     IdentitiesOnly yes
 EOF
-            new_entry="{\"ipv6\":\"$ipv6_addr\", \"server\":\"$server_name\", \"key\":\"yubikey\"}"
+            new_entry="{\"server\":\"$server_name\", \"ipv6\":\"$ipv6_addr\", \"key\":\"yubikey\"}"
         else
-            select_key_from_list
-            if [ -n "$key_path" ]; then
-                new_entry="{\"ipv6\":\"$ipv6_addr\", \"server\":\"$server_name\", \"key\":\"$key_path\"}"
+            read -p "Enter path to SSH key (default: ~/.ssh/id_rsa): " key_path
+            key_path=${key_path:-~/.ssh/id_rsa}
 
-                cat <<EOF >> ~/.ssh/config
+            new_entry="{\"server\":\"$server_name\", \"ipv6\":\"$ipv6_addr\", \"key\":\"$key_path\"}"
+
+            # Add to SSH Config without YubiKey
+            cat <<EOF >> "$SSH_CONFIG_FILE"
 
 Host $server_name
     HostName $ipv6_addr
@@ -65,133 +447,49 @@ Host $server_name
     IdentityFile $key_path
     IdentitiesOnly yes
 EOF
-            fi
         fi
 
-        if [ -s "$IP_CONFIG_FILE" ]; then
-            jq ". += [$new_entry]" "$IP_CONFIG_FILE" > "$IP_CONFIG_FILE.tmp" && mv "$IP_CONFIG_FILE.tmp" "$IP_CONFIG_FILE"
+        # Update IPv6 Artifact (visual reference)
+        if [ -s "$IPV6_ARTIFACT" ]; then
+            jq ". += [$new_entry]" "$IPV6_ARTIFACT" > "$IPV6_ARTIFACT.tmp" && mv "$IPV6_ARTIFACT.tmp" "$IPV6_ARTIFACT"
         else
-            echo "[$new_entry]" > "$IP_CONFIG_FILE"
+            echo "[$new_entry]" > "$IPV6_ARTIFACT"
         fi
+
+        # Sync ~/.ssh/config to /data/ssh_config
+        cp "$SSH_CONFIG_FILE" "$SSH_CONFIG_ARTIFACT"
 
         log "INFO" "✅ IPv6 entry saved for $server_name ($ipv6_addr)."
         echo -e "${GREEN}✅ IPv6 entry saved for $server_name ($ipv6_addr).${RESET}"
         ;;
 
     2)
-    read -p "Enter server name or IPv6 to remove: " remove_entry
-    if jq "del(.[] | select(.ipv6 == \"$remove_entry\" or .server == \"$remove_entry\"))" "$IP_CONFIG_FILE" > "$IP_CONFIG_FILE.tmp"; then
-        mv "$IP_CONFIG_FILE.tmp" "$IP_CONFIG_FILE"
-        log "INFO" "🗑 Entry removed for $remove_entry."
-        echo -e "${GREEN}✅ Entry removed for $remove_entry.${RESET}"
+        read -p "Enter server name or IPv6 to remove: " remove_entry
 
-        # Remove from SSH config
-        sed -i '' "/^Host $remove_entry\$/,/^$/d" ~/.ssh/config
-        log "INFO" "🗑 SSH config block removed for $remove_entry."
-    else
-        echo -e "${RED}❌ Failed to remove entry for $remove_entry.${RESET}"
-        log "ERROR" "Failed to remove entry for $remove_entry."
-    fi
-    ;;
+        if jq "del(.[] | select(.server == \"$remove_entry\" or .ipv6 == \"$remove_entry\"))" "$IPV6_ARTIFACT" > "$IPV6_ARTIFACT.tmp"; then
+            mv "$IPV6_ARTIFACT.tmp" "$IPV6_ARTIFACT"
+            log "INFO" "🗑 Entry removed for $remove_entry."
 
+            # Remove entry from SSH Config
+            sed -i '' "/^Host $remove_entry\$/,/^$/d" "$SSH_CONFIG_FILE"
+
+            # Sync ~/.ssh/config to /data/ssh_config
+            cp "$SSH_CONFIG_FILE" "$SSH_CONFIG_ARTIFACT"
+
+            echo -e "${GREEN}✅ Entry removed from SSH config and artifact.${RESET}"
+        else
+            echo -e "${RED}❌ Failed to remove entry for $remove_entry.${RESET}"
+            log "ERROR" "Failed to remove entry for $remove_entry."
+        fi
+        ;;
 
     3)
-        log "INFO" "Cancelled."
-        echo -e "${YELLOW}⚠️ Operation canceled.${RESET}"
+        echo "Returning to Main Menu..."
+        return
         ;;
+
     *)
-        log "WARN" "Invalid option. Try again."
         echo -e "${RED}❌ Invalid option. Try again.${RESET}"
-        sleep 1
         ;;
     esac
 }
-
-
-# Select Key from List to Use for SSH Config 
-select_key_from_list() {
-    keys=($(ls -1 "$SSH_DIR" 2>/dev/null))
-
-    if [ ${#keys[@]} -eq 0 ]; then
-        log "ERROR" "No files found in $SSH_DIR."
-        echo -e "${RED}❌ No files found in $SSH_DIR.${RESET}"
-        return 1
-    fi
-
-    echo "Select a file to import to YubiKey (keys, certs, etc.):"
-    select key_path in "${keys[@]}" "Cancel"; do
-        file_count=${#keys[@]}
-        if [[ "$REPLY" =~ ^[0-9]+$ && "$REPLY" -ge 1 && "$REPLY" -le "$file_count" ]]; then
-            selected_file="${keys[$((REPLY - 1))]}"
-            full_key_path="$SSH_DIR/$selected_file"
-            log "INFO" "Selected file: $full_key_path"
-            key_path="$full_key_path"
-            echo -e "${GREEN}✅ Key selected: $selected_file${RESET}"
-            break
-        elif [ "$REPLY" -eq $((file_count + 1)) ]; then
-            log "INFO" "Cancelled."
-            echo -e "${YELLOW}⚠️ Operation canceled.${RESET}"
-            break
-        else
-            log "WARN" "Invalid option selected: $REPLY"
-            echo -e "${RED}❌ Invalid option. Try again.${RESET}"
-        fi
-    done
-}
-
-# SSH into Host
-start_selected_ssh_session() {
-    log "INFO" "🔗 Starting SSH session using stored IPv6 configurations..."    
-    if [ ! -s "$IP_CONFIG_FILE" ]; then
-        log "WARN" "No IPv6 configurations found. Add an entry first."
-        echo "No IPv6 configurations found."
-        manage_ipv6_ssh_config
-        return
-    fi
-    
-    ipv6_entries=()
-    
-    while IFS= read -r entry; do
-        server=$(echo "$entry" | jq -r '.server')
-        ipv6=$(echo "$entry" | jq -r '.ipv6')
-        key=$(echo "$entry" | jq -r '.key')
-        ipv6_entries+=("$server ($ipv6) -> $key")
-    done < <(jq -c '.[]' "$IP_CONFIG_FILE")
-    
-    if [ ${#ipv6_entries[@]} -eq 0 ]; then
-        log "WARN" "No IPv6 configurations found."
-        echo "No IPv6 configurations found."
-        manage_ipv6_ssh_config
-        return
-    fi
-    
-    echo "Select server to SSH into:"
-    PS3="Select an option [1-${#ipv6_entries[@]}] or $((${#ipv6_entries[@]} + 1)): "
-    select choice in "${ipv6_entries[@]}" "Cancel"; do
-        if [ "$REPLY" -eq $((${#ipv6_entries[@]} + 1)) ]; then
-            log "INFO" "Cancelled."
-            echo -e "${YELLOW}⚠️  Operation canceled.${RESET}"
-            break
-        elif [ -n "$choice" ]; then
-            server_name=$(echo "$choice" | awk -F' ' '{print $1}')
-            log "INFO" "Selected server: $server_name"
-            ssh $server_name
-            
-            if [ $? -eq 0 ]; then
-                log "INFO" "✅ SSH session established to $server_name."
-            else
-                log "ERROR" "Failed to connect to $server_name."
-            fi
-            break
-        else
-            log "WARN" "Invalid selection. Try again."
-            echo -e "${RED}❌ Invalid selection. Try again.${RESET}"
-        fi
-    done
-}
-
-
-
-
-
-
