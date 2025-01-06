@@ -388,16 +388,16 @@ main_ssh_menu() {
 
 
 # =============================================================================
-# Manage IP Config Table with YubiKey Support
+# Manage IP Config Table with YubiKey Support (IPv4 and IPv6)
 # =============================================================================
 manage_ipv6_ssh_config() {
     mkdir -p "$(dirname "$IPV6_ARTIFACT")"
     touch "$IPV6_ARTIFACT"
     touch "$SSH_CONFIG_ARTIFACT"
 
-    log "INFO" "🤝 Managing IPv6 SSH configurations..."
+    log "INFO" "🤝 Managing SSH configurations (IPv4 and IPv6)..."
 
-    # Display current IPv6 configurations (visualize artifact)
+    # Display current configurations (visualize artifact)
     if [ -s "$IPV6_ARTIFACT" ]; then
         jq '.' "$IPV6_ARTIFACT"
     else
@@ -405,21 +405,21 @@ manage_ipv6_ssh_config() {
     fi
 
     echo -e "\nOptions:"
-    echo "1) Add new IPv6 entry"
+    echo "1) Add new IP entry"
     echo "2) Remove existing entry"
     echo "3) Return to Main Menu"
     read -p "Select an option: " choice
 
     case $choice in
     1)
-        read -p "Enter IPv6 address: " ipv6_addr
+        read -p "Enter IP address (IPv4 or IPv6): " ip_addr
         read -p "Enter server name: " server_name
         read -p "Use YubiKey for this host? (y/n): " use_yubikey
 
-        # Check for existing entries in IPv6 artifact
+        # Check for existing entries in artifact
         if jq -e --arg server "$server_name" '.[] | select(.server == $server)' "$IPV6_ARTIFACT" > /dev/null; then
-            echo -e "${RED}❌ Entry for $server_name already exists in IPv6 artifact. Skipping...${RESET}"
-            log "WARN" "$server_name already exists in IPv6 artifact. Skipping..."
+            echo -e "${RED}❌ Entry for $server_name already exists in artifact. Skipping...${RESET}"
+            log "WARN" "$server_name already exists in artifact. Skipping..."
             return
         fi
 
@@ -430,57 +430,64 @@ manage_ipv6_ssh_config() {
             return
         fi
 
-        # Determine how to add the entry
+        # Determine IP version (IPv4/IPv6)
+        if [[ "$ip_addr" =~ ":" ]]; then
+            address_family="inet6"
+        else
+            address_family="inet"
+        fi
+
+        # Add entry logic
         if [ "$use_yubikey" == "y" ]; then
-            read -p "IPv4 or IPv6? (4/6): " ip_version
             read -p "Enter username (default: root): " user_name
             user_name=${user_name:-root}
 
-            # Add entry to SSH Config
+            # Add YubiKey entry to SSH Config
             cat <<EOF >> "$SSH_CONFIG_FILE"
 
 Host $server_name
-    HostName $ipv6_addr
+    HostName $ip_addr
     User $user_name
     PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so
-    AddressFamily inet${ip_version}
+    AddressFamily $address_family
     IdentitiesOnly yes
 EOF
-            new_entry="{\"server\":\"$server_name\", \"ipv6\":\"$ipv6_addr\", \"key\":\"yubikey\"}"
+            new_entry="{\"server\":\"$server_name\", \"ipv6\":\"$ip_addr\", \"key\":\"yubikey\"}"
         else
             read -p "Enter path to SSH key (default: ~/.ssh/id_rsa): " key_path
             key_path=${key_path:-~/.ssh/id_rsa}
 
-            new_entry="{\"server\":\"$server_name\", \"ipv6\":\"$ipv6_addr\", \"key\":\"$key_path\"}"
-
-            # Add to SSH Config without YubiKey
+            # Add entry with SSH key
             cat <<EOF >> "$SSH_CONFIG_FILE"
 
 Host $server_name
-    HostName $ipv6_addr
+    HostName $ip_addr
     User root
     IdentityFile $key_path
+    AddressFamily $address_family
     IdentitiesOnly yes
 EOF
+            new_entry="{\"server\":\"$server_name\", \"ipv6\":\"$ip_addr\", \"key\":\"$key_path\"}"
         fi
 
-        # Update IPv6 Artifact (visual reference)
+        # Update Artifact (store new entry)
         if [ -s "$IPV6_ARTIFACT" ]; then
             jq ". += [$new_entry]" "$IPV6_ARTIFACT" > "$IPV6_ARTIFACT.tmp" && mv "$IPV6_ARTIFACT.tmp" "$IPV6_ARTIFACT"
         else
             echo "[$new_entry]" > "$IPV6_ARTIFACT"
         fi
 
-        # Sync ~/.ssh/config to /data/ssh_config
+        # Sync SSH Config to artifact
         cp "$SSH_CONFIG_FILE" "$SSH_CONFIG_ARTIFACT"
 
-        log "INFO" "✅ IPv6 entry saved for $server_name ($ipv6_addr)."
-        echo -e "${GREEN}✅ IPv6 entry saved for $server_name ($ipv6_addr).${RESET}"
+        log "INFO" "✅ IP entry saved for $server_name ($ip_addr)."
+        echo -e "${GREEN}✅ IP entry saved for $server_name ($ip_addr).${RESET}"
         ;;
 
     2)
-        read -p "Enter server name or IPv6 to remove: " remove_entry
+        read -p "Enter server name or IP to remove: " remove_entry
 
+        # Remove from Artifact
         if jq "del(.[] | select(.server == \"$remove_entry\" or .ipv6 == \"$remove_entry\"))" "$IPV6_ARTIFACT" > "$IPV6_ARTIFACT.tmp"; then
             mv "$IPV6_ARTIFACT.tmp" "$IPV6_ARTIFACT"
             log "INFO" "🗑 Entry removed for $remove_entry."
@@ -488,7 +495,7 @@ EOF
             # Remove entry from SSH Config
             sed -i '' "/^Host $remove_entry\$/,/^$/d" "$SSH_CONFIG_FILE"
 
-            # Sync ~/.ssh/config to /data/ssh_config
+            # Sync ~/.ssh/config to artifact
             cp "$SSH_CONFIG_FILE" "$SSH_CONFIG_ARTIFACT"
 
             echo -e "${GREEN}✅ Entry removed from SSH config and artifact.${RESET}"
