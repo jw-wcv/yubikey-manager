@@ -111,52 +111,47 @@ deploy_fido2_public_key() {
 
 # Export FIDO2 (ecdsa-sk/ed25519-sk) Public Key(s)
 export_fido2_public_key() {  
+    # Declare local variables using environment variables
+    local ssh_key_dir="$SSH_DIR"
+    local key_backup_dir="$KEY_DIR"
+    local log_dir="$LOG_DIR"
+    local project_root="$PROJECT_ROOT"
+    
+    log "INFO" "🔐 Initiating export of FIDO2 SSH public keys..."
+    
+    # Ensure SSH_DIR exists
+    mkdir -p "$ssh_key_dir"
+    
     # Attempt to pull FIDO2 resident keys directly to ~/.ssh/
     log "INFO" "🔐 Checking for FIDO2 resident keys on YubiKey (via ssh-keygen -K):"
     
-    # Ensure ~/.ssh exists
-    mkdir -p "$SSH_DIR"
+    # Change to SSH directory to force ssh-keygen to save keys in the right place
+    (
+        cd "$ssh_key_dir" || exit
+        ssh-keygen -K 2>&1 | tee "$log_dir/fido_resident_key.log"
+    )
     
-    # Export FIDO2 resident key explicitly to ~/.ssh/
-    ssh-keygen -K -f "$SSH_DIR/id_ecdsa_sk_rk" 2>&1 | tee /tmp/fido_resident_key.log
-    
-    if grep -q "Saved" /tmp/fido_resident_key.log; then
-        log "INFO" "✅ FIDO2 resident keys successfully retrieved and saved to $SSH_DIR."
+    # Handle resident key export
+    if grep -q "Saved" "$log_dir/fido_resident_key.log"; then
+        log "INFO" "✅ FIDO2 resident keys successfully retrieved and saved to $ssh_key_dir."
         
         # Copy the new resident keys from ~/.ssh to KEY_DIR
         for keyfile in id_ecdsa_sk_rk id_ecdsa_sk; do
-            if [ -f "$SSH_DIR/$keyfile" ]; then
-                cp "$SSH_DIR/$keyfile" "$KEY_DIR/" 2>/dev/null
-                cp "$SSH_DIR/$keyfile.pub" "$KEY_DIR/" 2>/dev/null
-                log "INFO" "🔑 Copied FIDO2 SSH Key to $KEY_DIR: $keyfile"
+            if [ -f "$ssh_key_dir/$keyfile" ]; then
+                cp "$ssh_key_dir/$keyfile" "$key_backup_dir/" 2>/dev/null
+                cp "$ssh_key_dir/$keyfile.pub" "$key_backup_dir/" 2>/dev/null
+                log "INFO" "🔑 Copied FIDO2 SSH Key to $key_backup_dir: $keyfile"
             fi
         done
     else
         log "INFO" "No FIDO2 resident keys found on YubiKey."
     fi
 
-    echo ""
-
-    # Handle misplaced files in project directory
-    log "INFO" "🔍 Checking for misplaced FIDO2 SSH keys in project directory ($PROJECT_ROOT):"
+    # Check for non-resident FIDO2 keys by scanning for *_sk files
+    log "INFO" "🔍 Searching for all FIDO2 SSH keys (resident and non-resident) in $ssh_key_dir and $key_backup_dir:"
     
-    # Explicitly check for the specific files
-    for keyfile in id_ecdsa_sk_rk id_ecdsa_sk id_ecdsa_sk_rk.pub id_ecdsa_sk.pub; do
-        if [ -f "$PROJECT_ROOT/$keyfile" ]; then
-            # Move key to ~/.ssh/
-            mv "$PROJECT_ROOT/$keyfile" "$SSH_DIR/" 2>/dev/null
-            log "INFO" "🔑 Moved $keyfile to $SSH_DIR."
-
-            # Copy to KEY_DIR as backup
-            cp "$SSH_DIR/$keyfile" "$KEY_DIR/" 2>/dev/null
-            log "INFO" "🔑 Copied $keyfile to $KEY_DIR for backup."
-        fi
-    done
-
-    # Check both local directories for non-resident FIDO2 SSH keys
-    log "INFO" "🔍 Searching for local FIDO2 SSH keys in $SSH_DIR and $KEY_DIR:"
-
-    for dir in "$SSH_DIR" "$KEY_DIR"; do
+    # Search in ~/.ssh and backup directories for keys
+    for dir in "$ssh_key_dir" "$key_backup_dir"; do
         if [ -d "$dir" ]; then
             fido2_keys=$(ls "$dir"/*_sk "$dir"/*_sk_rk 2>/dev/null)
 
@@ -171,4 +166,25 @@ export_fido2_public_key() {
             fi
         fi
     done
+
+    echo ""
+
+    # Handle misplaced files in project directory
+    log "INFO" "🔍 Checking for misplaced FIDO2 SSH keys in project directory ($project_root):"
+    
+    # Explicitly check for misplaced *_sk files
+    for keyfile in id_ecdsa_sk_rk id_ecdsa_sk id_ecdsa_sk_rk.pub id_ecdsa_sk.pub; do
+        if [ -f "$project_root/$keyfile" ]; then
+            # Move key to ~/.ssh/
+            mv "$project_root/$keyfile" "$ssh_key_dir/" 2>/dev/null
+            log "INFO" "🔑 Moved $keyfile to $ssh_key_dir."
+
+            # Copy to KEY_DIR as backup
+            cp "$ssh_key_dir/$keyfile" "$key_backup_dir/" 2>/dev/null
+            log "INFO" "🔑 Copied $keyfile to $key_backup_dir for backup."
+        fi
+    done
+
+    log "INFO" "🎉 FIDO2 SSH key export process completed."
 }
+

@@ -63,11 +63,9 @@ factory_reset_yubikey() {
         ykman config mode fido+ccid
         ykman piv reset
         ykman fido reset
-        ykman piv objects import ccc /dev/null
-        ykman piv objects import chuid /dev/null
-        # ykman otp reset
         ykman openpgp reset
         ykman oath reset
+        # ykman otp reset  # Uncomment if OTP reset is required
         log "INFO" "🧹 YubiKey has been reset to factory defaults."
         sudo killall -HUP pcscd scardservicesd
         log "INFO" "🔄 Smart card services restarted."
@@ -76,6 +74,7 @@ factory_reset_yubikey() {
         log "INFO" "Factory reset cancelled."
     fi
 }
+
 
 # Backup SSH, YubiKey configuration, and PGP keys -- this needs a fix to use the KEY DIR
 backup_configuration() {
@@ -972,13 +971,13 @@ manage_fido2_pins() {
         case $fido_choice in
             1)
                 echo -e "${CYAN}Changing the FIDO2 PIN will not erase credentials.${RESET}"
-                ykman fido change-pin
+                ykman fido access change-pin
                 ;;
             2)
                 echo -e "${RED}⚠️ Resetting FIDO2 will erase all FIDO credentials. This cannot be undone.${RESET}"
                 read -rp "Are you sure you want to proceed? (y/N): " confirm
                 if [[ $confirm =~ ^[Yy]$ ]]; then
-                    ykman fido reset
+                    ykman fido access reset
                 fi
                 ;;
             3)

@@ -183,11 +183,9 @@ export_piv_public_key() {
     log "INFO" "✅ PIV public key exported successfully to $export_file."
 }
 
-# =============================================================================
 # Generate Public SSH Key from YubiKey PIV (Slot 9a or 9c)
-# =============================================================================
 generate_ssh_key_from_yubikey() {
-    local ssh_key_dir="$KEY_DIR/sshKeys"
+    local ssh_key_dir="$KEY_DIR"
     mkdir -p "$ssh_key_dir"
     local slot=""
     local output_file=""

@@ -1,9 +1,12 @@
 # Log UX
 log() {
-    local level="$1"
+    local level="${1:-INFO}"  # Default to INFO if no level is provided
     local msg="$2"
-    echo -e "$(date) [$level] - $msg" | tee -a "$log_file"
+    local log_file="$LOG_DIR/fido_export.log"  # Ensure this points to the right log file
+
+    echo "$(date +"%Y-%m-%d %H:%M:%S") [$level] - $msg" | tee -a "$log_file"
 }
+
 
 # Error UX
 error_exit() {
