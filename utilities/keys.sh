@@ -28,7 +28,8 @@ export_ssh_public_key() {
     echo "1) PIV (ssh-rsa) Key"
     echo "2) FIDO2 (ecdsa-sk/ed25519-sk) Key"
     echo "3) Both PIV and FIDO2 Keys"
-    read -p "Enter your choice [1-3]: " export_choice
+    echo "4) 9a/9c SSH Keys"
+    read -p "Enter your choice [1-4]: " export_choice
     
     case $export_choice in
         1)
@@ -40,6 +41,9 @@ export_ssh_public_key() {
         3)
             export_piv_public_key
             export_fido2_public_key
+            ;;
+        4)
+            generate_ssh_key_from_yubikey
             ;;
         *)
             log "WARN" "Invalid choice. Returning to main menu."

@@ -183,6 +183,68 @@ export_piv_public_key() {
     log "INFO" "✅ PIV public key exported successfully to $export_file."
 }
 
+# =============================================================================
+# Generate Public SSH Key from YubiKey PIV (Slot 9a or 9c)
+# =============================================================================
+generate_ssh_key_from_yubikey() {
+    local ssh_key_dir="$KEY_DIR/sshKeys"
+    mkdir -p "$ssh_key_dir"
+    local slot=""
+    local output_file=""
+    local piv_slot=""
+
+    # Prompt user to choose the slot
+    echo "Select PIV Slot to generate SSH key from:"
+    echo "1) Slot 9a (Authentication)"
+    echo "2) Slot 9c (Digital Signature)"
+    read -p "Select an option [1-2]: " slot_choice
+
+    case $slot_choice in
+    1)
+        piv_slot="9a"
+        output_file="9a_public_ssh_key"
+        ;;
+    2)
+        piv_slot="9c"
+        output_file="9c_public_ssh_key"
+        ;;
+    *)
+        echo -e "${RED}❌ Invalid option. Exiting...${RESET}"
+        return 1
+        ;;
+    esac
+
+    log "INFO" "🔑 Exporting public key from slot $piv_slot..."
+    
+    # Export public key from the selected slot (no management key needed)
+    if ykman piv keys export $piv_slot "$ssh_key_dir/public.pem"; then
+        log "INFO" "✅ Public key exported from slot $piv_slot."
+    else
+        log "ERROR" "❌ Failed to export public key from slot $piv_slot."
+        return 1
+    fi
+
+    # Convert public key to OpenSSH format
+    log "INFO" "🔧 Converting public key to OpenSSH format..."
+    if ssh-keygen -i -m PKCS8 -f "$ssh_key_dir/public.pem" > "$ssh_key_dir/${output_file}.pub"; then
+        log "INFO" "✅ SSH public key generated as ${output_file}.pub."
+    else
+        log "ERROR" "❌ Failed to convert public key to SSH format."
+        return 1
+    fi
+
+    # Clean up temporary PEM file
+    rm -f "$ssh_key_dir/public.pem"
+    log "INFO" "🗑 Temporary PEM file removed."
+
+    # Display the resulting public key
+    log "INFO" "🔍 SSH Public Key (${output_file}.pub):"
+    cat "$ssh_key_dir/${output_file}.pub"
+
+    echo -e "${GREEN}✅ SSH key generation complete. Key saved to $ssh_key_dir/${output_file}.pub.${RESET}"
+}
+
+
 
 ########### WORK IN PROGRESS ###########
 
