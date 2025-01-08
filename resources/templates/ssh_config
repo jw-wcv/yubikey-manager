@@ -1,3 +1,6 @@
+# SSH Configuration File
+# Strong security, YubiKey/FIDO2 support, and agent forwarding best practices.
+
 Host *
     PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so
     ForwardAgent no
@@ -9,15 +12,15 @@ Host *
     IdentityFile ~/.ssh/id_ecdsa_sk
     IdentityFile ~/.ssh/id_ecdsa_sk_rk  # Fallback resident key
 
-    IdentitiesOnly no  # Try all identities (FIDO2 + YubiKey PIV)
+    IdentitiesOnly no  # Use all identities (FIDO2 + YubiKey PIV)
 
-    # KEX Algorithms - Strong and modern key exchanges
+    # Strong KEX Algorithms
     KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256
 
-    # Ciphers - Strong ciphers only
+    # Strong Ciphers
     Ciphers aes256-gcm@openssh.com,aes128-gcm@openssh.com,chacha20-poly1305@openssh.com
 
-    # Host Key Algorithms - Exclude legacy DSA, use modern algorithms
+    # Modern Host Key Algorithms
     HostKeyAlgorithms rsa-sha2-512,rsa-sha2-256,ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521
 
     # Session Management
@@ -33,18 +36,46 @@ Host *
     RekeyLimit 1G 1h
     LogLevel VERBOSE
 
+    # GPG Agent Socket for YubiKey SSH (Cross-platform)
+    IdentityAgent ${HOME}/.gnupg/S.gpg-agent.ssh
+
+# Bastion Host (Agent Forwarding Allowed)
+Host Bastion
+    HostName deployer.example.com
+    User bastion
+    ForwardAgent yes
+    PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so
+    IdentityFile ~/.ssh/id_ecdsa_sk
+    IdentityFile ~/.ssh/id_ecdsa_sk_rk
+    IdentitiesOnly yes # SSH will only use the identities from the specified IdentityFile or the key derived from the PKCS11Provider
+    AddressFamily inet
+    ServerAliveInterval 30
+    ServerAliveCountMax 5
+
+# Worker Nodes (Access Through Bastion, No Direct Agent Forwarding)
+Host Node_*
+    User node
+    ForwardAgent no  # Safer - avoid forwarding agent to nodes
+    ProxyJump Bastion
+    IdentityFile ~/.ssh/id_ecdsa_sk
+    IdentityFile ~/.ssh/id_ecdsa_sk_rk
+    IdentitiesOnly yes # SSH will only use the identities from the specified IdentityFile or the key derived from the PKCS11Provider
+    AddressFamily inet
+    ServerAliveInterval 30
+    ServerAliveCountMax 5
+
+# Unique Host Configurations
 Host Battlestation
     HostName 2a01:240:ad00:2501:3:efb7:da33:32b1
     User root
     IdentityFile ~/.ssh/id_ecdsa_sk
-    IdentityFile ~/.ssh/id_ecdsa_sk_rk  # Fallback resident key
+    IdentityFile ~/.ssh/id_ecdsa_sk_rk
     AddressFamily inet6
-    IdentitiesOnly yes
+    IdentitiesOnly yes 
 
 Host Battlestation_PIV
     HostName 2a01:240:ad00:2501:3:efb7:da33:32b1
     User root
-    PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so
+    PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so # OR Linux: PKCS11Provider /usr/lib/x86_64-linux-gnu/opensc-pkcs11.so
     AddressFamily inet6
-    IdentitiesOnly yes
-
+    IdentitiesOnly yes  

@@ -109,7 +109,7 @@ Ensure the following are installed:
    ```
 3. Run the script:
    ```bash
-   sudo ./key_manager.sh
+   ./key_manager.sh
    ```
 4. Follow the on-screen prompts to manage YubiKey operations.
 

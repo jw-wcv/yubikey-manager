@@ -1,0 +1,49 @@
+# Basic Security
+Port 22
+Protocol 2
+PermitRootLogin no
+MaxAuthTries 3
+MaxStartups 3:50:10
+LoginGraceTime 20s
+
+# Authentication
+PasswordAuthentication no
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+AllowUsers node
+
+# Host Key Algorithms (Modern)
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+
+KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256
+Ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes128-gcm@openssh.com
+MACs hmac-sha2-512,hmac-sha2-256
+
+# Disable X11 Forwarding and TCP Forwarding
+X11Forwarding no
+AllowTcpForwarding no
+GatewayPorts no
+PermitTunnel no
+
+# Session Restrictions
+ClientAliveInterval 30
+ClientAliveCountMax 2
+TCPKeepAlive no
+
+# LogLevel
+LogLevel VERBOSE
+SyslogFacility AUTHPRIV
+
+# Use Key-based Authentication
+AuthorizedKeysFile .ssh/authorized_keys
+StrictModes yes
+
+# Prevent Agent Forwarding
+AllowAgentForwarding no
+PermitUserEnvironment no
+UseDNS no
+
+# Limit SSH Access to Bastion Only
+AllowUsers node@10.0.0.1  # Only allow SSH access from the bastion IP

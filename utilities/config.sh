@@ -21,20 +21,6 @@ check_yubikey_presence() {
     return 0
 }
 
-# Configure YubiKey for PIV and SSH
-configure_yubikey() {
-    log "INFO" "🛠 Configuring YubiKey for PIV and SSH..."
-    ykman piv reset --force || log "ERROR" "Failed to reset YubiKey"
-    ykman piv access set-retries 3 3 || log "WARN" "Failed to set PIN retries"
-
-    generate_management_key || {
-        log "ERROR" "Management key generation failed."
-        return 1
-    }
-    
-    log "INFO" "✅ YubiKey configured."
-}
-
 # Generate new or default MGT Key
 generate_management_key() {
     log "INFO" "🔑 Generating new management key..."
@@ -115,21 +101,6 @@ EOF
 }
 
 
-# Set PIN retries separately for reusability
-set_pin_retries() {
-    log "INFO" "🔑 Setting PIN retries to 3 attempts..."
-    ykman piv set-pin-retries 3 3 3 &>/dev/null || log "WARN" "Failed to set PIN retries"
-    spinner
-}
-
-# Change YubiKey PIN and PUK
-configure_pin() {
-    log "INFO" "🔑 Configuring YubiKey PINs..."
-    ykman piv access change-pin || log "WARN" "Failed to change PIN"
-    ykman piv access change-puk || log "WARN" "Failed to change PUK"
-}
-
-
 
 ################################################################################
 #####                          SSH Config Prep                             #####
@@ -140,9 +111,9 @@ setup_yubikey_for_ssh() {
     check_yubikey_presence || return
 
     log "INFO" "🔧 Initializing YubiKey SSH configuration..."
-
-    configure_pin
-    log "INFO" "✅ PIN Configured"
+    ykman piv access change-pin
+    generate_management_key
+    log "INFO" "✅ PIN and Management Key Configured"
 
     # Choose key type to set up
     echo "Select SSH key type to configure with YubiKey:"
@@ -159,7 +130,7 @@ setup_yubikey_for_ssh() {
             setup_rsa_piv_ssh
             ;;
         3)
-            setup_fido2_ssh
+            generate_fido2_ssh_key
             setup_rsa_piv_ssh
             ;;
         *)
@@ -175,62 +146,13 @@ setup_yubikey_for_ssh() {
 setup_fido2_ssh() {
     generate_fido2_ssh_key
   #  deploy_fido2_public_key
-  #  configure_fido2_ssh_config
 }
 
 # Setup ssh-rsa via PIV SSH Configuration
 setup_rsa_piv_ssh() {
     manage_rsa_keys
   #  deploy_rsa_piv_public_key
-  #  configure_rsa_piv_ssh_config
 }
-
-# Configure SSH to Use FIDO2 SSH Key
-configure_fido2_ssh_config() {
-    log "INFO" "⚙️ Configuring SSH to use FIDO2 SSH key..."
-
-    # Backup existing SSH config
-    cp "$SSH_CONFIG_FILE" "${SSH_CONFIG_FILE}.backup" 2>/dev/null
-
-    # Check if FIDO2 IdentityFile is already set
-    if grep -q "IdentityFile $SSH_KEY" "$SSH_CONFIG_FILE"; then
-        log "INFO" "✅ SSH config already references the FIDO2 SSH key."
-    else
-        # Add configuration for FIDO2 key
-        cat <<EOL >> "$SSH_CONFIG_FILE"
-
-# YubiKey FIDO2 SSH Key
-Host *
-    IdentityFile $SSH_KEY
-    IdentitiesOnly yes
-EOL
-        log "INFO" "🔧 Added FIDO2 SSH key configuration to SSH config."
-    fi
-}
-
-# Configure SSH to Use ssh-rsa via PIV
-configure_rsa_piv_ssh_config() {
-    log "INFO" "⚙️ Configuring SSH to use ssh-rsa via PIV..."
-
-    # Backup existing SSH config
-    cp "$SSH_CONFIG_FILE" "${SSH_CONFIG_FILE}.backup" 2>/dev/null
-
-    # Check if PKCS11Provider is already set
-    if grep -q "PKCS11Provider /opt/homebrew/lib/libykcs11.dylib" "$SSH_CONFIG_FILE"; then
-        log "INFO" "✅ PKCS11Provider already configured in SSH config."
-    else
-        # Add configuration for ssh-rsa via PIV
-        cat <<EOL >> "$SSH_CONFIG_FILE"
-
-# YubiKey ssh-rsa via PIV
-Host *
-    PKCS11Provider /opt/homebrew/lib/libykcs11.dylib
-    IdentitiesOnly yes
-EOL
-        log "INFO" "🔧 Added PKCS11Provider configuration to SSH config."
-    fi
-}
-
 
 
 ################################################################################
@@ -249,7 +171,7 @@ ready_check() {
     if [ ! -f "$JSON_CONFIG_PATH" ] || ! grep -q "management_key" "$JSON_CONFIG_PATH"; then
         log "❌ YubiKey configuration is incomplete or missing."
         echo "Redirecting to YubiKey configuration..."
-        configure_yubikey
+        setup_yubikey_for_ssh
         return
     else
         log "✅ YubiKey JSON configuration found."

@@ -378,12 +378,20 @@ main_ssh_menu() {
         case $choice in
         1) sync_ssh_with_artifact ;;
         2) manage_ipv6_ssh_config ;;
-        3) restore_ssh_from_template ;;
+        3) 
+            read -p "⚠️  Are you sure you want to restore SSH Config? This will overwrite existing files. (y/n): " confirm
+            if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                restore_ssh_from_template
+            else
+                echo "Restore operation cancelled."
+            fi
+            ;;
         4) echo "Returning to Main Menu..."; break ;;
         *) echo "❌ Invalid option. Try again." ;;
         esac
     done
 }
+
 
 # =============================================================================
 # Manage IP Config Table with YubiKey Support (IPv4 and IPv6)
@@ -412,7 +420,7 @@ manage_ipv6_ssh_config() {
     1)
         read -p "Enter IP address (IPv4 or IPv6): " ip_addr
         read -p "Enter server name: " server_name
-        read -p "Use YubiKey for this host? (y/n): " use_yubikey
+        read -p "Yubikey or local certificate? (y/n): " use_yubikey
 
         # Check for existing entries in artifact
         if jq -e --arg server "$server_name" '.[] | select(.server == $server)' "$IPV6_ARTIFACT" > /dev/null; then
@@ -445,15 +453,21 @@ manage_ipv6_ssh_config() {
 
 Host $server_name
     HostName $ip_addr
-    User $user_name
+    User $user_name 
     PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so
     AddressFamily $address_family
     IdentitiesOnly yes
 EOF
             new_entry="{\"server\":\"$server_name\", \"ipv6\":\"$ip_addr\", \"key\":\"yubikey\"}"
         else
-            read -p "Enter path to SSH key (default: ~/.ssh/id_rsa): " key_path
-            key_path=${key_path:-~/.ssh/id_rsa}
+            read -p "Enter path to SSH key (default: ~/.ssh/id_ecdsa_sk or ~/.ssh/id_ecdsa_sk_rk): " key_path
+            if [ -z "$key_path" ]; then
+                if [ -f ~/.ssh/id_ecdsa_sk ]; then
+                    key_path=~/.ssh/id_ecdsa_sk
+                else
+                    key_path=~/.ssh/id_ecdsa_sk_rk
+                fi
+            fi
 
             # Add entry with SSH key
             cat <<EOF >> "$SSH_CONFIG_FILE"

@@ -52,4 +52,15 @@ export_ssh_public_key() {
     esac
 }
 
+# Retrieve Management Key from Configuration
+get_management_key() {
+    local management_key
+    management_key=$(jq -r '.management_key' "$JSON_CONFIG_PATH" 2>/dev/null)
+    if [[ -z "$management_key" || "$management_key" == "null" ]]; then
+        log "ERROR" "❌ Management key not found. Configure YubiKey first."
+        exit 1
+    fi
+    echo "$management_key"
+}
+
 

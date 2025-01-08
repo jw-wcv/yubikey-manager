@@ -94,26 +94,22 @@ setup_menu() {
         echo -e "${CYAN}${BOLD}🛠️  YubiKey Manager - Setup${RESET}"
         echo -e "${MAGENTA}${BOLD}Setup Menu:${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
-        echo -e "${YELLOW}1) Configure YubiKey (PIN, PUK, Management Key)${RESET}"
-        echo -e "${YELLOW}2) Configure Yubikey for SSH${RESET}"
-        echo -e "${YELLOW}3) 🚀 Ready Check 🚀${RESET}"
-        echo -e "${YELLOW}4) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}1) Configure Yubikey for SSH${RESET}"
+        echo -e "${YELLOW}2) 🚀 Ready Check 🚀${RESET}"
+        echo -e "${YELLOW}3) Back to Main Menu${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-4]: ${RESET}")" setup_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-3]: ${RESET}")" setup_choice
 
         case $setup_choice in
             1)
-                configure_yubikey
-                ;;
-            2)
                 setup_yubikey_for_ssh
                 ;;
-            3)
-                ready_check
+            2)
+                ready_checkv
                 ;;
-            4)
+            3)
                 break
                 ;;
             *)
