@@ -226,46 +226,38 @@ settings_menu() { #adding PIN Manager, ~/.ssh/config + ssh-add Manager etc
         echo -e "${CYAN}${BOLD}🛠️  YubiKey Manager - Settings${RESET}"
         echo -e "${MAGENTA}${BOLD}Settings Menu:${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
-        echo -e "${YELLOW}1) Backup Configuration${RESET}"
-        echo -e "${YELLOW}2) Restore Configuration${RESET}"
-        echo -e "${YELLOW}3) Manage Yubikey PINs${RESET}"
-        echo -e "${YELLOW}4) Manage OSX Disk Encryption${RESET}"
-        echo -e "${YELLOW}5) Manage Smart Cards${RESET}"  
-        echo -e "${YELLOW}6) Manage OpenPGP Keys${RESET}"
-        echo -e "${YELLOW}7) Factory Reset YubiKey${RESET}"
-        echo -e "${YELLOW}8) Reset ~/.SSH+ Perms${RESET}"
-        echo -e "${YELLOW}9) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}1) Manage Yubikey PINs${RESET}"
+        echo -e "${YELLOW}2) Manage OSX Disk Encryption${RESET}"
+        echo -e "${YELLOW}3) Manage Smart Cards${RESET}"  
+        echo -e "${YELLOW}4) Manage OpenPGP Keys${RESET}"
+        echo -e "${YELLOW}5) Factory Reset YubiKey${RESET}"
+        echo -e "${YELLOW}6) Reset ~/.SSH+ Perms${RESET}"
+        echo -e "${YELLOW}7) Back to Main Menu${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-9]: ${RESET}")" settings_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-7]: ${RESET}")" settings_choice
 
         case $settings_choice in
             1)
-                backup_configuration
-                ;;
-            2)
-                restore_configuration
-                ;;
-            3)
                 manage_yubikey_pins
                 ;;
-            4)
+            2)
                 manage_disk_encryption
                 ;;
-            5)
+            3)
                 configure_smart_cards  
                 ;;
-            6)
+            4)
                 manage_openpgp_keys
                 ;;
+            5)
+                factory_reset_yubikey
+                ;;
+            6)
+                factory_reset_yubikey
+                ;;
             7)
-                factory_reset_yubikey
-                ;;
-            8)
-                factory_reset_yubikey
-                ;;
-            9)
                 break
                 ;;
             *)

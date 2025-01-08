@@ -76,78 +76,6 @@ factory_reset_yubikey() {
 }
 
 
-# Backup SSH, YubiKey configuration, and PGP keys -- this needs a fix to use the KEY DIR
-backup_configuration() {
-    mkdir -p "$BACKUP_DIR"
-    mkdir -p "$KEY_DIR"
-
-    # Backup SSH configuration
-    cp "$IP_CONFIG_FILE" "$BACKUP_DIR/yubikey_ssh_config.bak.$(date +%s)"
-    cp "$IP_CONFIG_FILE" "$KEY_DIR/yubikey_ssh_config.bak.$(date +%s)"
-    log "INFO" "🔒 SSH Configuration backed up to $BACKUP_DIR and $KEY_DIR."
-
-    # Prompt for GPG key details
-    read -rp "Enter the email associated with your GPG key: " gpg_email
-    local timestamp
-    timestamp=$(date +%s)
-
-    # Export GPG keys (public and private) to BACKUP_DIR
-    log "INFO" "🔑 Exporting GPG public key to $BACKUP_DIR and $KEY_DIR..."
-    gpg --armor --export "$gpg_email" > "$BACKUP_DIR/yubikey_pub_$timestamp.asc"
-    gpg --armor --export "$gpg_email" > "$KEY_DIR/yubikey_pub_$timestamp.asc"
-    
-    if [ $? -eq 0 ]; then
-        log "INFO" "✅ Public key exported successfully to both locations."
-    else
-        log "ERROR" "❌ Failed to export public key."
-    fi 
-
-    log "INFO" "🔑 Exporting GPG private key to $BACKUP_DIR and $KEY_DIR..."
-    gpg --armor --export-secret-keys "$gpg_email" > "$BACKUP_DIR/yubikey_priv_$timestamp.asc"
-    gpg --armor --export-secret-keys "$gpg_email" > "$KEY_DIR/yubikey_priv_$timestamp.asc"
-    
-    if [ $? -eq 0 ]; then
-        log "INFO" "✅ Private key exported successfully to both locations."
-    else
-        log "ERROR" "❌ Failed to export private key."
-    fi
-
-    log "INFO" "⚠️  Reminder: FIDO2 keys cannot be backed up directly. Ensure a second YubiKey is enrolled as a backup."
-}
-
-# Restore latest backup configuration and PGP keys -- this needs a fix to use the KEY DIR
-restore_configuration() {
-    local latest_backup
-    latest_backup=$(ls -t "$BACKUP_DIR" | head -n 1)
-    
-    if [ -n "$latest_backup" ]; then
-        cp "$BACKUP_DIR/$latest_backup" "$IP_CONFIG_FILE"
-        log "INFO" "🔄 SSH Configuration restored from $latest_backup."
-    else
-        log "WARN" "No SSH backup found."
-    fi
-
-    log "INFO" "⚙️  Searching for PGP backups..."
-    local pgp_files
-    pgp_files=$(ls "$BACKUP_DIR"/yubikey_*_*.asc 2>/dev/null)
-    
-    if [ -z "$pgp_files" ]; then
-        log "WARN" "No PGP backups found."
-        return
-    fi
-
-    log "INFO" "Available PGP backups:"
-    echo "$pgp_files"
-    
-    for pgp_file in $pgp_files; do
-        log "INFO" "🔑 Importing $pgp_file..."
-        gpg --import "$pgp_file"
-    done
-
-    log "INFO" "✅ PGP keys imported successfully. Run 'gpg --list-keys' to verify."
-}
-
-
 ################################################################################
 #####                       Smart Card Config                              #####
 ################################################################################
@@ -650,10 +578,12 @@ manage_openpgp_keys() {
         echo "--------------------------------------"
         echo "1) Setup YubiKey for OpenPGP (Generate Keys)"
         echo "2) Configure GPG Environment"
-        echo "3) Back to Main Menu"
+        echo "3) Backup Configuration"
+        echo "4) Restore Configuration"
+        echo "5) Back to Main Menu"
         echo ""
 
-        read -rp "Select an option [1-3]: " choice
+        read -rp "Select an option [1-5]: " choice
 
         case $choice in
             1)
@@ -665,6 +595,12 @@ manage_openpgp_keys() {
                 configureGPG || log "ERROR" "❌ GPG configuration failed. Please check permissions and try again."
                 ;;
             3)
+                backup_configuration
+                ;;
+            4)
+                restore_configuration
+                ;;    
+            5)
                 log "INFO" "❌ Returning to main menu."
                 break
                 ;;
@@ -674,6 +610,64 @@ manage_openpgp_keys() {
                 ;;
         esac
     done
+}
+
+
+# Backup SSH, YubiKey configuration, and PGP keys -- this needs a fix to use the KEY DIR
+backup_configuration() {
+    mkdir -p "$BACKUP_DIR"
+    mkdir -p "$KEY_DIR"
+
+    # Prompt for GPG key details
+    read -rp "Enter the email associated with your GPG key: " gpg_email
+    local timestamp
+    timestamp=$(date +%s)
+
+    # Export GPG keys (public and private) to BACKUP_DIR
+    log "INFO" "🔑 Exporting GPG public key to $BACKUP_DIR and $KEY_DIR..."
+    gpg --armor --export "$gpg_email" > "$BACKUP_DIR/yubikey_pub_$timestamp.asc"
+    gpg --armor --export "$gpg_email" > "$KEY_DIR/yubikey_pub_$timestamp.asc"
+    
+    if [ $? -eq 0 ]; then
+        log "INFO" "✅ Public key exported successfully to both locations."
+    else
+        log "ERROR" "❌ Failed to export public key."
+    fi 
+
+    log "INFO" "🔑 Exporting GPG private key to $BACKUP_DIR and $KEY_DIR..."
+    gpg --armor --export-secret-keys "$gpg_email" > "$BACKUP_DIR/yubikey_priv_$timestamp.asc"
+    gpg --armor --export-secret-keys "$gpg_email" > "$KEY_DIR/yubikey_priv_$timestamp.asc"
+    
+    if [ $? -eq 0 ]; then
+        log "INFO" "✅ Private key exported successfully to both locations."
+    else
+        log "ERROR" "❌ Failed to export private key."
+    fi
+}
+
+# Restore latest backup configuration and PGP keys -- this needs a fix to use the KEY DIR
+restore_configuration() {
+    local latest_backup
+    latest_backup=$(ls -t "$BACKUP_DIR" | head -n 1)
+
+    log "INFO" "⚙️  Searching for PGP backups..."
+    local pgp_files
+    pgp_files=$(ls "$BACKUP_DIR"/yubikey_*_*.asc 2>/dev/null)
+    
+    if [ -z "$pgp_files" ]; then
+        log "WARN" "No PGP backups found."
+        return
+    fi
+
+    log "INFO" "Available PGP backups:"
+    echo "$pgp_files"
+    
+    for pgp_file in $pgp_files; do
+        log "INFO" "🔑 Importing $pgp_file..."
+        gpg --import "$pgp_file"
+    done
+
+    log "INFO" "✅ PGP keys imported successfully. Run 'gpg --list-keys' to verify."
 }
 
 

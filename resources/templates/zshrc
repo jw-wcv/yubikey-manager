@@ -1,0 +1,108 @@
+# =========================
+# Zsh Configuration (Optimized)
+# =========================
+
+# -------------------------
+# Path and Environment
+# -------------------------
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"  # Prioritize Homebrew and local binaries
+export PATH="$HOME/bin:$PATH:/usr/local/sbin"         # Add personal bin and sbin paths
+export EDITOR='vim'                                   # Set default editor
+export LANG=en_US.UTF-8                               # Language and encoding
+
+# -------------------------
+# Aliases (Quality of Life)
+# -------------------------
+alias ll='ls -la'
+alias gs='git status'
+alias gc='git commit -m'
+alias gp='git push'
+alias update='brew update && brew upgrade'
+alias cls='clear'
+alias dev='cd ~/Documents/Projects'
+
+# Quick Navigation Aliases
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+
+# -------------------------
+# Tmux Auto-start (Entry Point)
+# -------------------------
+if [ -z "$TMUX" ]; then
+    if [ -f ~/tmux/tmux_launcher.sh ]; then
+        bash ~/tmux/tmux_launcher.sh
+    fi
+fi
+
+# -------------------------
+# Tmux Session Persistence
+# -------------------------
+if [ -z "$TMUX" ]; then
+    tmux attach || tmux new-session
+fi
+
+# -------------------------
+# Prompt Customization
+# -------------------------
+autoload -Uz colors && colors
+export PROMPT='%F{cyan}%n%f@%m %F{yellow}%~%f %# '  # User@host path with color
+
+# Git Branch in Prompt
+autoload -Uz vcs_info
+precmd () { vcs_info }
+zstyle ':vcs_info:git:*' formats '%F{magenta}(%b)%f'
+export RPROMPT='${vcs_info_msg_0_}'
+
+# -------------------------
+# Plugins & Completions
+# -------------------------
+autoload -Uz compinit
+compinit
+
+# Improve History Behavior
+HISTFILE=~/.zsh_history
+HISTSIZE=10000
+SAVEHIST=10000
+setopt HIST_IGNORE_DUPS  # Ignore duplicates
+setopt HIST_FIND_NO_DUPS  # Avoid showing dupes in search
+setopt INC_APPEND_HISTORY  # Append immediately to history
+
+# Enable Case-insensitive Completion
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+
+# -------------------------
+# Greeting (Optional)
+# -------------------------
+echo "Welcome, $(whoami)! Terminal ready at $(date +'%Y-%m-%d %H:%M:%S')."
+
+cat << "EOF"
+     __        __   _                          
+     \ \      / /__| | ___ ___  _ __ ___   ___ 
+      \ \ /\ / / _ \ |/ __/ _ \| '_ ` _ \ / _ \
+       \ V  V /  __/ | (_| (_) | | | | | |  __/
+        \_/\_/ \___|_|\___\___/|_| |_| |_|\___|
+EOF
+
+# -------------------------
+# Dynamic Tmux Session Management
+# -------------------------
+TMUX_DIR=~/tmux
+EXCLUDE_SCRIPT="tmux_launcher.sh"
+
+if [ -d "$TMUX_DIR" ]; then
+    SCRIPTS=($(ls "$TMUX_DIR"/*.sh 2>/dev/null | grep -v "$EXCLUDE_SCRIPT"))
+
+    if [ ${#SCRIPTS[@]} -gt 0 ]; then
+        echo "Available Tmux Sessions:"
+        echo "========================"
+        
+        for i in "${!SCRIPTS[@]}"; do
+            DESCRIPTION=$(head -n 1 "${SCRIPTS[$i]}" | sed 's/^#//')  # Extract first line
+            SCRIPT_NAME=$(basename "${SCRIPTS[$i]}" .sh | sed 's/_tmux//')
+            printf "%-3s %-30s %s\n" "[$i]" "$SCRIPT_NAME" "$DESCRIPTION"
+        done
+        
+        echo "========================"
+    fi
+fi
