@@ -1,0 +1,26 @@
+# General system-wide environment variables
+LANG="en_US.UTF-8"
+LC_ALL="en_US.UTF-8"
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+
+# Application-specific environment variables
+API_KEY="<--KEY_GOES_HERE>"                 # API key for external service
+SECRET_KEY="<--SECRET_KEY_GOES_HERE>"       # Application secret key
+DATABASE_URL="postgresql://user:password@dbserver:5432/mydatabase" # Database connection string
+
+# Cloud and service credentials
+AWS_ACCESS_KEY_ID="<--YOUR_AWS_ACCESS_KEY-->"
+AWS_SECRET_ACCESS_KEY="<--YOUR_AWS_SECRET_KEY-->"
+AWS_REGION="us-east-1"
+
+# Application environment
+APP_ENV="production"                        # Could be 'development', 'testing', or 'production'
+APP_DEBUG="false"                           # Enable or disable debugging
+
+# Proxy settings (if needed)
+http_proxy="http://proxy.example.com:8080"
+https_proxy="https://proxy.example.com:8080"
+no_proxy="localhost,127.0.0.1,.example.com"
+
+# Miscellaneous
+LOG_LEVEL="info"                            # Logging level: debug, info, warn, error
