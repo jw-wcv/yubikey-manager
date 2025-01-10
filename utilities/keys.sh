@@ -55,12 +55,29 @@ export_ssh_public_key() {
 # Retrieve Management Key from Configuration
 get_management_key() {
     local management_key
-    management_key=$(jq -r '.management_key' "$JSON_CONFIG_PATH" 2>/dev/null)
-    if [[ -z "$management_key" || "$management_key" == "null" ]]; then
-        log "ERROR" "❌ Management key not found. Configure YubiKey first."
+    local protected_flag
+
+    # Extract management_key and protected flag from config
+    management_key=$(jq -r '.management_key // empty' "$JSON_CONFIG_PATH" 2>/dev/null)
+    protected_flag=$(jq -r '.protected // empty' "$JSON_CONFIG_PATH" 2>/dev/null)
+
+    if [[ -n "$management_key" ]]; then
+        # Return as separate arguments
+        echo "--management-key" "$management_key"
+    elif [[ "$protected_flag" == "true" ]]; then
+        log "INFO" "🔒 Management key is protected on the device."
+        # Do not return any management key options for protected keys
+        echo ""
+    else
+        log "ERROR" "❌ Management key not found or protected flag not set. Configure YubiKey first."
         exit 1
     fi
-    echo "$management_key"
 }
+
+
+
+
+
+
 
 

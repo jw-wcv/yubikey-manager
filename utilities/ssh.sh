@@ -368,6 +368,8 @@ start_selected_ssh_session() {
 # =============================================================================
 main_ssh_menu() {
     while true; do
+        clear
+        ascii_art
         echo -e "\n🔧 YubiKey SSH Configuration Manager"
         echo "1) Sync SSH Configurations"
         echo "2) Manage SSH Config"

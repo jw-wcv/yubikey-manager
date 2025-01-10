@@ -21,87 +21,6 @@ check_yubikey_presence() {
     return 0
 }
 
-# Generate new or default MGT Key
-generate_management_key() {
-    log "INFO" "🔑 Generating new management key..."
-    
-    local default_pin="123456"
-    local default_puk="12345678"
-
-    # Generate management key and cleanly extract it
-    management_key=$(ykman piv access change-management-key --generate --touch 2>&1 | awk '/Generated management key:/ {print $4}')
-    
-    # Fallback in case generation fails
-    if [[ -z "$management_key" ]]; then
-        log "ERROR" "❌ Management key generation failed. Using default key..."
-        management_key="010203040506070801020304050607080102030405060708"
-        
-        ykman piv access change-management-key \
-            --management-key "$management_key" \
-            --new-management-key "$management_key" --touch || {
-                log "WARN" "⚠️ Failed to set default management key."
-                return 1
-            }
-        log "INFO" "✅ Default management key applied."
-    fi
-
-    log "INFO" "✅ New management key: $management_key"
-
-    # Ensure the config path exists
-    mkdir -p "$(dirname "$JSON_CONFIG_PATH")"
-
-    # Read existing JSON or initialize if not present
-    if [ -f "$JSON_CONFIG_PATH" ]; then
-        config=$(jq '.' "$JSON_CONFIG_PATH" 2>/dev/null) || config="{}"
-    else
-        config="{}"
-    fi
-
-    log "DEBUG" "Current Config: $config"
-
-    # Fallback if the config is empty
-    if [ -z "$config" ]; then
-        config="{}"
-        log "WARN" "⚠️ Config was empty. Initializing to default empty JSON."
-    fi
-
-    # Update or insert management key, PIN, and PUK into the JSON config
-    updated_config=$(echo "$config" | jq \
-        --arg mk "$management_key" \
-        --arg pin "$default_pin" \
-        --arg puk "$default_puk" \
-        '.management_key = $mk | .pin = $pin | .puk = $puk'
-    ) || {
-        log "ERROR" "❌ Failed to update JSON structure."
-        return 1
-    }
-
-    # Handle potential jq failure or empty result
-    if [ -z "$updated_config" ]; then
-        updated_config=$(cat <<EOF
-{
-  "management_key": "$management_key",
-  "pin": "$default_pin",
-  "puk": "$default_puk"
-}
-EOF
-)
-        log "WARN" "⚠️ No updated config. Using default values."
-    fi
-
-    log "DEBUG" "Updated Config: $updated_config"
-
-    # Save updated config to file
-    echo "$updated_config" > "$JSON_CONFIG_PATH"
-    log "INFO" "✅ Management key, PIN, and PUK saved to $JSON_CONFIG_PATH"
-
-    # Backup the management key to a hidden file
-    echo "$management_key" > "$KEY_BACKUP_PATH"
-    log "INFO" "✅ Management key backed up to $KEY_BACKUP_PATH"
-}
-
-
-
 ################################################################################
 #####                          SSH Config Prep                             #####
 ################################################################################
@@ -111,7 +30,8 @@ setup_yubikey_for_ssh() {
     check_yubikey_presence || return
 
     log "INFO" "🔧 Initializing YubiKey SSH configuration..."
-    ykman piv access change-pin
+    generate_or_update_pin
+    generate_or_update_puk
     generate_management_key
     log "INFO" "✅ PIN and Management Key Configured"
 

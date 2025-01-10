@@ -42,6 +42,8 @@ trap "tput cnorm; echo -e '\n${RED}✖️  Script interrupted. Exiting...${RESET
 # =============================================================================
 main_menu() {
     while true; do
+        clear
+        ascii_art
         # Display Menu Header
         echo -e "${CYAN}${BOLD}🛠️  YubiKey Manager${RESET}"
         echo -e "${MAGENTA}${BOLD}Main Menu:${RESET}"
@@ -107,7 +109,7 @@ setup_menu() {
                 setup_yubikey_for_ssh
                 ;;
             2)
-                ready_checkv
+                ready_check
                 ;;
             3)
                 break
@@ -230,13 +232,14 @@ settings_menu() { #adding PIN Manager, ~/.ssh/config + ssh-add Manager etc
         echo -e "${YELLOW}2) Manage OSX Disk Encryption${RESET}"
         echo -e "${YELLOW}3) Manage Smart Cards${RESET}"  
         echo -e "${YELLOW}4) Manage OpenPGP Keys${RESET}"
-        echo -e "${YELLOW}5) Factory Reset YubiKey${RESET}"
-        echo -e "${YELLOW}6) Reset ~/.SSH+ Perms${RESET}"
-        echo -e "${YELLOW}7) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}5) Manage OTP Codes${RESET}"
+        echo -e "${YELLOW}6) Factory Reset YubiKey${RESET}"
+        echo -e "${YELLOW}7) Reset ~/.SSH+ Perms${RESET}"
+        echo -e "${YELLOW}8) Back to Main Menu${RESET}"
         echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-7]: ${RESET}")" settings_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-8]: ${RESET}")" settings_choice
 
         case $settings_choice in
             1)
@@ -251,13 +254,16 @@ settings_menu() { #adding PIN Manager, ~/.ssh/config + ssh-add Manager etc
             4)
                 manage_openpgp_keys
                 ;;
-            5)
-                factory_reset_yubikey
+            5) 
+                manage_yubikey_otp
                 ;;
             6)
                 factory_reset_yubikey
                 ;;
             7)
+                fix_permissions
+                ;;
+            8)
                 break
                 ;;
             *)

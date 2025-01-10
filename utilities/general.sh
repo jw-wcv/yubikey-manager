@@ -1,11 +1,19 @@
-# Log UX
+# Function to log messages with different levels, output to stderr and append to log file
 log() {
     local level="${1:-INFO}"  # Default to INFO if no level is provided
     local msg="$2"
     local log_file="$LOG_DIR/fido_export.log"  # Ensure this points to the right log file
 
-    echo "$(date +"%Y-%m-%d %H:%M:%S") [$level] - $msg" | tee -a "$log_file"
+    # Ensure the log directory exists
+    mkdir -p "$LOG_DIR" || {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] - ❌ Failed to create log directory $LOG_DIR." >&2
+        return 1
+    }
+
+    # Output to both stderr and append to the log file
+    echo "$(date +"%Y-%m-%d %H:%M:%S") [$level] - $msg" | tee -a "$log_file" >&2
 }
+
 
 # Error UX
 error_exit() {

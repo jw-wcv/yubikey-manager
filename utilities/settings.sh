@@ -213,16 +213,19 @@ remove_smart_card() {
 # Main Function - Configure Smart Cards
 configure_smart_cards() {
     while true; do
-        echo "--------------------------------------"
-        echo "  🛡️  Smart Card Configuration Manager  "
-        echo "--------------------------------------"
-        echo "1) View Smart Cards (sc_auth identities)"
-        echo "2) Add Smart Card (Pair)"
-        echo "3) Remove Smart Card (Unpair)"
-        echo "4) Back to Main Menu"
+        clear
+        ascii_art
+        echo -e "${CYAN}${BOLD}🛡️  Smart Card Configuration Manager${RESET}"
+        echo -e "${MAGENTA}${BOLD}Smart Card Configuration Menu:${RESET}"
+        echo -e "${YELLOW}=========================================${RESET}"
+        echo -e "${YELLOW}1) View Smart Cards (sc_auth identities)${RESET}"
+        echo -e "${YELLOW}2) Add Smart Card (Pair)${RESET}"
+        echo -e "${YELLOW}3) Remove Smart Card (Unpair)${RESET}"
+        echo -e "${YELLOW}4) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -p "Select an option [1-4]: " choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-4]: ${RESET}")" choice
 
         case $choice in
             1)
@@ -377,16 +380,18 @@ disable_full_disk_encryption() {
 
 # Manage Full Disk Encryption
 manage_disk_encryption() {
-    echo "---------------------------------------------"
-    echo "        🛡️  Full Disk Encryption Manager 🛡️        "
-    echo "---------------------------------------------"
-    echo "Please select an option:"
-    echo "1) Enable Full Disk Encryption"
-    echo "2) Disable Full Disk Encryption"
-    echo "3) Cancel"
+    clear
+    ascii_art
+    echo -e "${CYAN}${BOLD}🛡️  Full Disk Encryption Manager 🛡️${RESET}"
+    echo -e "${MAGENTA}${BOLD}Full Disk Encryption Menu:${RESET}"
+    echo -e "${YELLOW}=========================================${RESET}"
+    echo -e "${YELLOW}1) Enable Full Disk Encryption${RESET}"
+    echo -e "${YELLOW}2) Disable Full Disk Encryption${RESET}"
+    echo -e "${YELLOW}3) Cancel${RESET}"
+    echo -e "${YELLOW}=========================================${RESET}"
     echo ""
 
-    read -p "Enter your choice [1-3]: " choice
+    read -rp "$(echo -e "${CYAN}Enter your choice [1-3]: ${RESET}")" choice
 
     case "$choice" in
         1)
@@ -573,17 +578,21 @@ configureGPG() {
 # Manage OpenPGP Functions Menu
 manage_openpgp_keys() {
     while true; do
-        echo "--------------------------------------"
-        echo "  🔐 OpenPGP Configuration Manager     "
-        echo "--------------------------------------"
-        echo "1) Setup YubiKey for OpenPGP (Generate Keys)"
-        echo "2) Configure GPG Environment"
-        echo "3) Backup Configuration"
-        echo "4) Restore Configuration"
-        echo "5) Back to Main Menu"
+        clear
+        ascii_art
+        echo -e "${CYAN}${BOLD}🔐 OpenPGP Configuration Manager${RESET}"
+        echo -e "${MAGENTA}${BOLD}OpenPGP Configuration Menu:${RESET}"
+        echo -e "${YELLOW}=========================================${RESET}"
+        echo -e "${YELLOW}1) Setup YubiKey for OpenPGP (Generate Keys)${RESET}"
+        echo -e "${YELLOW}2) Configure GPG Environment${RESET}"
+        echo -e "${YELLOW}3) Backup Configuration${RESET}"
+        echo -e "${YELLOW}4) Restore Configuration${RESET}"
+        echo -e "${YELLOW}5) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}=========================================${RESET}"
         echo ""
 
-        read -rp "Select an option [1-5]: " choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-5]: ${RESET}")" choice
+
 
         case $choice in
             1)
@@ -910,28 +919,33 @@ manage_yubikey_pins() {
 manage_piv_pins() {
     while true; do
         echo -e "${MAGENTA}${BOLD}Manage PIV PIN(s)${RESET}"
-        echo -e "${YELLOW}1) Change PIV User PIN${RESET}"
+        echo -e "${YELLOW}1) Change PIV PIN${RESET}"
         echo -e "${YELLOW}2) Unblock/Reset PIV PIN (Requires PUK)${RESET}"
-        echo -e "${YELLOW}3) Change PIV Management Key${RESET}"
-        echo -e "${YELLOW}4) Back to PIN Management Menu${RESET}"
+        echo -e "${YELLOW}3) Change PIV PUK${RESET}"
+        echo -e "${YELLOW}4) Change PIV Management Key${RESET}"
+        echo -e "${YELLOW}5) Back to PIN Management Menu${RESET}"
         echo ""
 
-        read -rp "$(echo -e "${CYAN}Select an option [1-4]: ${RESET}")" piv_choice
+        read -rp "$(echo -e "${CYAN}Select an option [1-5]: ${RESET}")" piv_choice
 
         case $piv_choice in
             1)
-                echo -e "${CYAN}Changing the PIV User PIN will not erase certificates but will lock the YubiKey after 3 failed attempts.${RESET}"
-                ykman piv access change-pin
+                echo -e "${CYAN}Changing the PIV PIN will not erase certificates but will lock the YubiKey after 3 failed attempts.${RESET}"
+                generate_or_update_pin
                 ;;
             2)
                 echo -e "${CYAN}Resetting the PIV PIN requires the PUK. 3 failed attempts will permanently block PIV.${RESET}"
                 ykman piv access unblock-pin
                 ;;
             3)
-                echo -e "${CYAN}Changing the Management Key will not erase keys but losing it will prevent administrative actions.${RESET}"
-                ykman piv access change-management-key
+                echo -e "${CYAN}Changing the PIV PUK will not erase keys but losing it will prevent administrative actions.${RESET}"
+                generate_or_update_puk
                 ;;
             4)
+                echo -e "${CYAN}Changing the Management Key will not erase keys but losing it will prevent administrative actions.${RESET}"
+                generate_management_key
+                ;;
+            5)
                 break
                 ;;
             *)
@@ -941,6 +955,403 @@ manage_piv_pins() {
         esac
     done
 }
+
+# Generate or Update PIN
+generate_or_update_pin() {
+    log "INFO" "🔑 Generating or updating PIN..."
+
+    # Ask user whether to store the PIN on the device or manage it themselves
+    echo "Do you want to store the PIN on the device or manage it yourself?"
+    echo "1. Store on device (random value will be generated)"
+    echo "2. Manage myself (you will input the PIN)"
+    read -p "Select an option (1 or 2): " user_choice
+
+    case "$user_choice" in
+        1)
+            log "INFO" "🔒 Generating random PIN..."
+            pin=$(openssl rand -hex 4)
+            ykman piv access change-pin --new-pin "$pin" || {
+                log "ERROR" "❌ Failed to set random PIN."
+                return 1
+            }
+            ;;
+        2)
+            read -sp "Enter a new PIN: " pin
+            echo
+            ykman piv access change-pin --new-pin "$pin" || {
+                log "ERROR" "❌ Failed to set user-defined PIN."
+                return 1
+            }
+            ;;
+        *)
+            log "ERROR" "❌ Invalid choice. Please select 1 or 2."
+            return 1
+            ;;
+    esac
+
+    # Ensure the config path exists
+    mkdir -p "$(dirname "$JSON_CONFIG_PATH")"
+
+    # Read existing JSON or initialize if not present
+    if [ -f "$JSON_CONFIG_PATH" ]; then
+        config=$(jq '.' "$JSON_CONFIG_PATH" 2>/dev/null) || config="{}"
+    else
+        config="{}"
+    fi
+
+    log "DEBUG" "Current Config: $config"
+
+    # Fallback if the config is empty
+    if [ -z "$config" ]; then
+        config="{}"
+        log "WARN" "⚠️ Config was empty. Initializing to default empty JSON."
+    fi
+
+    # Update or insert PIN into the JSON config
+    updated_config=$(echo "$config" | jq \
+        --arg pin "$pin" \
+        '.pin = $pin'
+    ) || {
+        log "ERROR" "❌ Failed to update JSON structure."
+        return 1
+    }
+
+    # Handle potential jq failure or empty result
+    if [ -z "$updated_config" ]; then
+        updated_config=$(cat <<EOF
+{
+  "pin": "$pin"
+}
+EOF
+)
+        log "WARN" "⚠️ No updated config. Using default values."
+    fi
+
+    log "DEBUG" "Updated Config: $updated_config"
+
+    # Save updated config to file
+    echo "$updated_config" > "$JSON_CONFIG_PATH"
+    log "INFO" "✅ PIN saved to $JSON_CONFIG_PATH"
+}
+
+# Generate or Update PUK
+generate_or_update_puk() {
+    log "INFO" "🔑 Generating or updating PUK..."
+
+    # Ask user whether to store the PUK on the device or manage it themselves
+    echo "Do you want to store the PUK on the device or manage it yourself?"
+    echo "1. Store on device (random value will be generated)"
+    echo "2. Manage myself (you will input the PUK)"
+    read -p "Select an option (1 or 2): " user_choice
+
+    case "$user_choice" in
+        1)
+            log "INFO" "🔒 Generating random PUK..."
+            puk=$(openssl rand -hex 8)
+            ykman piv access change-puk --new-puk "$puk" || {
+                log "ERROR" "❌ Failed to set random PUK."
+                return 1
+            }
+            ;;
+        2)
+            read -sp "Enter a new PUK: " puk
+            echo
+            ykman piv access change-puk --new-puk "$puk" || {
+                log "ERROR" "❌ Failed to set user-defined PUK."
+                return 1
+            }
+            ;;
+        *)
+            log "ERROR" "❌ Invalid choice. Please select 1 or 2."
+            return 1
+            ;;
+    esac
+
+    # Ensure the config path exists
+    mkdir -p "$(dirname "$JSON_CONFIG_PATH")"
+
+    # Read existing JSON or initialize if not present
+    if [ -f "$JSON_CONFIG_PATH" ]; then
+        config=$(jq '.' "$JSON_CONFIG_PATH" 2>/dev/null) || config="{}"
+    else
+        config="{}"
+    fi
+
+    log "DEBUG" "Current Config: $config"
+
+    # Fallback if the config is empty
+    if [ -z "$config" ]; then
+        config="{}"
+        log "WARN" "⚠️ Config was empty. Initializing to default empty JSON."
+    fi
+
+    # Update or insert PUK into the JSON config
+    updated_config=$(echo "$config" | jq \
+        --arg puk "$puk" \
+        '.puk = $puk'
+    ) || {
+        log "ERROR" "❌ Failed to update JSON structure."
+        return 1
+    }
+
+    # Handle potential jq failure or empty result
+    if [ -z "$updated_config" ]; then
+        updated_config=$(cat <<EOF
+{
+  "puk": "$puk"
+}
+EOF
+)
+        log "WARN" "⚠️ No updated config. Using default values."
+    fi
+
+    log "DEBUG" "Updated Config: $updated_config"
+
+    # Save updated config to file
+    echo "$updated_config" > "$JSON_CONFIG_PATH"
+    log "INFO" "✅ PUK saved to $JSON_CONFIG_PATH"
+}
+
+# Generate new or default Management Key
+generate_management_key() {
+    log "INFO" "🔑 Generating new management key..."
+
+    local default_pin="123456"
+    local default_puk="12345678"
+    local default_mgt_key="010203040506070801020304050607080102030405060708"  # Replace with your actual default key if different
+
+    # Check if jq is installed
+    if ! command -v jq &> /dev/null; then
+        log "ERROR" "❌ 'jq' is not installed. Please install 'jq' to proceed."
+        return 1
+    fi
+
+    # Initialize variables
+    local current_mgt_key=""
+    local new_mgt_key=""
+    local management_key=""
+
+    # Attempt to read the current management key from the config
+    if [[ -f "$JSON_CONFIG_PATH" ]]; then
+        current_mgt_key=$(jq -r '.management_key // empty' "$JSON_CONFIG_PATH" 2>/dev/null)
+        if [[ -n "$current_mgt_key" ]]; then
+            log "INFO" "🔑 Using existing management key from config."
+        else
+            log "WARN" "⚠️ No existing management key found in config."
+        fi
+    else
+        log "WARN" "⚠️ Configuration file not found."
+    fi
+
+    if [[ -n "$current_mgt_key" ]]; then
+        # Validate the current management key format (48 hex characters)
+        if [[ ! "$current_mgt_key" =~ ^[0-9a-fA-F]{48}$ ]]; then
+            log "ERROR" "❌ Invalid management key format in config."
+            return 1
+        fi
+
+        # Use existing management key to set a new one
+        log "INFO" "🔄 Attempting to set a new management key using the existing key..."
+
+        # Generate a secure random management key
+        new_mgt_key=$(openssl rand -hex 24)  # 24 bytes = 48 hex characters
+        log "DEBUG" "Generated new management key: $new_mgt_key"
+
+        # Attempt to set the new management key using the existing key
+        log "DEBUG" "Executing: ykman piv access change-management-key --management-key $current_mgt_key --new-management-key $new_mgt_key --touch"
+        ykman piv access change-management-key \
+            --management-key "$current_mgt_key" \
+            --new-management-key "$new_mgt_key" --touch
+
+        local ykman_exit_code=$?
+
+        if [[ $ykman_exit_code -ne 0 ]]; then
+            log "WARN" "⚠️ Failed to set a new management key using the existing key."
+            log "ERROR" "❌ Management key update failed."
+            return 1
+        fi
+
+        management_key="$new_mgt_key"
+        log "INFO" "✅ New management key applied successfully using the existing key."
+    else
+        # No management key in config, prompt user or use default
+        log "INFO" "🔄 No existing management key found. Proceeding to generate a new key."
+
+        # Prompt the user for the current management key or use default
+        read -s -p "Enter the current management key [leave blank to use default]: " input_mgt_key
+        echo
+
+        if [[ -z "$input_mgt_key" ]]; then
+            log "INFO" "🔑 Using default management key."
+            current_mgt_key="$default_mgt_key"
+        else
+            current_mgt_key="$input_mgt_key"
+        fi
+
+        # Validate the current management key format
+        if [[ -n "$current_mgt_key" && ! "$current_mgt_key" =~ ^[0-9a-fA-F]{48}$ ]]; then
+            log "ERROR" "❌ Invalid management key format."
+            return 1
+        fi
+
+        # Generate a secure random management key
+        new_mgt_key=$(openssl rand -hex 24)  # 24 bytes = 48 hex characters
+        log "DEBUG" "Generated new management key: $new_mgt_key"
+
+        # Attempt to set the new management key using the provided or default key
+        log "DEBUG" "Executing: ykman piv access change-management-key --management-key $current_mgt_key --new-management-key $new_mgt_key --touch"
+        ykman piv access change-management-key \
+            --management-key "$current_mgt_key" \
+            --new-management-key "$new_mgt_key" --touch
+
+        local ykman_exit_code=$?
+
+        if [[ $ykman_exit_code -ne 0 ]]; then
+            log "WARN" "⚠️ Failed to set a new management key."
+            log "ERROR" "❌ Management key update failed."
+            return 1
+        fi
+
+        management_key="$new_mgt_key"
+        log "INFO" "✅ New management key applied successfully."
+    fi
+
+    # Prompt the user to choose between protecting the key on the device or managing it locally
+    while true; do
+        read -p "Do you want to protect the management key on the device using '--protect'? [y/N]: " protect_choice
+        case "$protect_choice" in
+            [Yy]* )
+                log "INFO" "🔒 Protecting the management key on the device using '--protect'..."
+
+                # Attempt to protect the management key on the device using the new key
+                log "DEBUG" "Executing: ykman piv access change-management-key --management-key $management_key --protect --touch"
+                ykman piv access change-management-key \
+                    --management-key "$management_key" \
+                    --protect --touch
+
+                local protect_exit_code=$?
+
+                if [[ $protect_exit_code -ne 0 ]]; then
+                    log "WARN" "⚠️ Failed to protect the management key on the device."
+                    log "ERROR" "❌ '--protect' operation failed."
+                    return 1
+                fi
+
+                # Update the config to indicate protection is enabled
+                # Remove the 'management_key' field and set 'protected' to true
+                if [[ -f "$JSON_CONFIG_PATH" ]]; then
+                    log "DEBUG" "Updating config to set 'management_key' to null and 'protected' to true."
+                    config=$(jq '.management_key = null | .protected = true' "$JSON_CONFIG_PATH" 2>/dev/null)
+                else
+                    log "DEBUG" "Creating new config with 'protected': true."
+                    config=$(jq -n '{"protected": true}')
+                fi
+
+                # Handle potential jq failure or empty result
+                if [[ -z "$config" ]]; then
+                    config=$(cat <<EOF
+{
+  "protected": true
+}
+EOF
+                    )
+                    log "WARN" "⚠️ No updated config from jq. Using default protection settings."
+                fi
+
+                # Save updated config to file
+                echo "$config" > "$JSON_CONFIG_PATH" || {
+                    log "ERROR" "❌ Failed to write updated config to $JSON_CONFIG_PATH."
+                    return 1
+                }
+                log "INFO" "✅ Management key protected on device and config updated."
+
+                # Remove the local backup if it exists, as the key is now protected on the device
+                if [[ -f "$KEY_BACKUP_PATH" ]]; then
+                    rm -f "$KEY_BACKUP_PATH"
+                    log "INFO" "🗑️ Removed local management key backup as it's now protected on the device."
+                fi
+
+                break
+                ;;
+            [Nn]* | "" )
+                log "INFO" "🗃️ Managing the management key locally."
+
+                # Ensure the config path exists
+                mkdir -p "$(dirname "$JSON_CONFIG_PATH")" || {
+                    log "ERROR" "❌ Failed to create directory for $JSON_CONFIG_PATH."
+                    return 1
+                }
+
+                # Read existing JSON or initialize if not present
+                if [[ -f "$JSON_CONFIG_PATH" ]]; then
+                    config=$(jq '.' "$JSON_CONFIG_PATH" 2>/dev/null) || config="{}"
+                else
+                    config="{}"
+                fi
+
+                log "DEBUG" "Current Config: $config"
+
+                # Fallback if the config is empty
+                if [[ -z "$config" ]] || [[ "$config" == "null" ]]; then
+                    config="{}"
+                    log "WARN" "⚠️ Config was empty. Initializing to default empty JSON."
+                fi
+
+                # Update or insert management key, PIN, and PUK into the JSON config
+                # Only set pin and puk if they do not already exist
+                log "DEBUG" "Updating config with management key, PIN, and PUK."
+                updated_config=$(echo "$config" | jq \
+                    --arg mk "$management_key" \
+                    --arg pin "$default_pin" \
+                    --arg puk "$default_puk" \
+                    ' .management_key = $mk 
+                      | if has("pin") then . else .pin = $pin end 
+                      | if has("puk") then . else .puk = $puk end '
+                ) || {
+                    log "ERROR" "❌ Failed to update JSON structure."
+                    return 1
+                }
+
+                # Handle potential jq failure or empty result
+                if [[ -z "$updated_config" ]]; then
+                    updated_config=$(cat <<EOF
+{
+  "management_key": "$management_key",
+  "pin": "$default_pin",
+  "puk": "$default_puk"
+}
+EOF
+                    )
+                    log "WARN" "⚠️ No updated config from jq. Using default values."
+                fi
+
+                log "DEBUG" "Updated Config: $updated_config"
+
+                # Save updated config to file
+                echo "$updated_config" > "$JSON_CONFIG_PATH" || {
+                    log "ERROR" "❌ Failed to write to $JSON_CONFIG_PATH."
+                    return 1
+                }
+                log "INFO" "✅ Management key saved to $JSON_CONFIG_PATH"
+
+                # Backup the management key to a hidden file with restricted permissions
+                echo "$management_key" > "$KEY_BACKUP_PATH" || {
+                    log "ERROR" "❌ Failed to write to $KEY_BACKUP_PATH."
+                    return 1
+                }
+                
+                break
+                ;;
+            * )
+                echo "❌ Invalid input. Please enter 'y' or 'n'."
+                ;;
+        esac
+    done
+}
+
+
+
+
 
 # =============================================================================
 # Manage FIDO2 PIN(s)
@@ -1016,5 +1427,61 @@ manage_openpgp_pins() {
                 sleep 1
                 ;;
         esac
+    done
+}
+
+
+# =============================================================================
+# Manage OTP Code(s)
+# =============================================================================
+manage_yubikey_otp() {
+    clear
+    ascii_art
+    while true; do
+        echo -e "${MAGENTA}${BOLD}Manage OTPs:${RESET}"
+        echo -e "${YELLOW}=========================================${RESET}"
+        echo -e "${YELLOW}1) View OTP Slot Information${RESET}"
+        echo -e "${YELLOW}2) Delete OTP Slot 1${RESET}"
+        echo -e "${YELLOW}3) Delete OTP Slot 2${RESET}"
+        echo -e "${YELLOW}4) Reset Both OTP Slots${RESET}"
+        echo -e "${YELLOW}5) Back to Main Menu${RESET}"
+        echo -e "${YELLOW}=========================================${RESET}"
+        echo ""
+
+        read -rp "$(echo -e "${CYAN}Select an option [1-5]: ${RESET}")" otp_choice
+
+        case $otp_choice in
+            1)
+                echo -e "${CYAN}Fetching OTP Slot Information...${RESET}"
+                ykman otp info
+                ;;
+            2)
+                echo -e "${CYAN}Deleting OTP Slot 1...${RESET}"
+                ykman otp delete 1
+                echo -e "${GREEN}✅ OTP Slot 1 deleted successfully.${RESET}"
+                ;;
+            3)
+                echo -e "${CYAN}Deleting OTP Slot 2...${RESET}"
+                ykman otp delete 2
+                echo -e "${GREEN}✅ OTP Slot 2 deleted successfully.${RESET}"
+                ;;
+            4)
+                echo -e "${CYAN}Resetting Both OTP Slots...${RESET}"
+                ykman otp delete 1 && ykman otp delete 2
+                ykman otp static --generate slot1 & ykman otp static --generate slot2
+
+                echo -e "${GREEN}✅ Both OTP slots have been reset.${RESET}"
+                ;;
+            5)
+                break
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid option. Please try again.${RESET}"
+                sleep 1
+                ;;
+        esac
+
+        echo ""
+        read -rp "$(echo -e "${CYAN}Press Enter to continue...${RESET}")" _
     done
 }

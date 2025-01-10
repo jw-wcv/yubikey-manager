@@ -87,15 +87,21 @@ configure_yubikey_9a_9d() {
 # Generate Resident RSA Key and Cert for 9c
 configure_yubikey_9c() {
     local yubikey_slot="9c"
-    local key_name="Guardian_Seal"
-
-    # Avoid prefix duplication
-    if [[ ! "$key_name" =~ ^${yubikey_slot}_ ]]; then
-        key_name="${yubikey_slot}_${key_name}"
-    fi
-
+    local cert_subject="Guardian_Seal"  # Clean subject for the YubiKey
+    local key_name="9c_${cert_subject}"  # Include slot name in file names for clarity
     local pubkey_path="$SSH_DIR/${key_name}.pub"
-    local management_key=$(get_management_key)
+    local cert_path="$KEY_DIR/${key_name}_cert.pem"
+    local management_key_option
+
+    # Capture the arguments as an array
+    read -r -a management_key_option <<< "$(get_management_key)"
+    log "DEBUG" "Management Key Option: ${management_key_option[*]}"
+
+    # Ensure directories exist
+    mkdir -p "$SSH_DIR" "$KEY_DIR" || {
+        log "ERROR" "❌ Failed to create directories $SSH_DIR and $KEY_DIR."
+        return 1
+    }
 
     log "🔐 Generating RSA key directly on YubiKey (slot $yubikey_slot)..."
 
@@ -103,51 +109,69 @@ configure_yubikey_9c() {
     read -p "Generate RSA key directly on the YubiKey (slot $yubikey_slot)? (y/n): " confirm
     if [[ "$confirm" != "y" ]]; then
         log "❌ Operation cancelled by user."
-        return
+        return 1
+    fi
+
+    # List PIV-managed keys
+    log "INFO" "📄 PIV (ssh-rsa) Keys:"
+    ykman piv info || log "ERROR" "❌ Failed to list PIV keys."
+
+    # Check if slot 9c already has a key by parsing 'ykman piv info' output
+    log "DEBUG" "Checking if slot $yubikey_slot already has a key..."
+    if ykman piv info | grep -q "^    Key $yubikey_slot:"; then
+        log "INFO" "⚠️ Slot $yubikey_slot already has a key. It will be overwritten."
     fi
 
     # Generate RSA key on YubiKey for slot 9c
-    ykman piv keys generate --pin-policy=once --touch-policy=always \
-        --management-key "$management_key" "$yubikey_slot" "$pubkey_path"
+    log "DEBUG" "Executing: ykman piv keys generate ${management_key_option[@]} --pin-policy=once --touch-policy=always $yubikey_slot $pubkey_path"
+    if ! ykman piv keys generate "${management_key_option[@]}" \
+        --pin-policy=once --touch-policy=always \
+        "$yubikey_slot" "$pubkey_path"; then
+        log "ERROR" "❌ Failed to generate RSA key for slot $yubikey_slot."
+        return 1
+    fi
 
-    if [ $? -eq 0 ]; then
-        log "✅ RSA key generated on YubiKey for slot $yubikey_slot."
+    log "✅ RSA key generated on YubiKey for slot $yubikey_slot."
 
-        # Generate certificate directly
-        mkdir -p "$KEY_DIR"
+    log "📜 Generating certificate on YubiKey for slot $yubikey_slot..."
+    log "DEBUG" "Executing: ykman piv certificates generate ${management_key_option[@]} --subject \"CN=$cert_subject\" $yubikey_slot $pubkey_path"
+    if ! ykman piv certificates generate "${management_key_option[@]}" \
+        --subject "CN=$cert_subject" \
+        "$yubikey_slot" "$pubkey_path"; then
+        log "ERROR" "❌ Certificate generation failed on YubiKey for slot $yubikey_slot."
+        return 1
+    fi
 
-        local cert_path="$KEY_DIR/${key_name}_cert.pem"
-        log "📜 Generating certificate on YubiKey for slot 9c..."
+    # Export certificate to local directory
+    log "DEBUG" "Executing: ykman piv certificates export $yubikey_slot $cert_path --format=PEM"
+    if ! ykman piv certificates export "$yubikey_slot" "$cert_path" --format=PEM; then
+        log "ERROR" "❌ Failed to export certificate from YubiKey."
+        return 1
+    fi
 
-        (
-            cd "$KEY_DIR" || exit
-            ykman piv certificates generate --subject "CN=$key_name" \
-                --management-key "$management_key" "$yubikey_slot" "$pubkey_path"
-
-            if [ $? -eq 0 ]; then
-                ykman piv certificates export "$yubikey_slot" "${key_name}_cert.pem" --format=PEM
-                if [ -f "${key_name}_cert.pem" ]; then
-                    log "✅ Certificate exported from YubiKey to $cert_path"
-                else
-                    log "❌ Failed to export certificate from YubiKey."
-                fi
-            else
-                log "❌ Certificate generation failed on YubiKey for slot $yubikey_slot."
-            fi
-        )
-
-        # Export public key to KEY_DIR
-        if [ -f "$pubkey_path" ]; then
-            mkdir -p "$KEY_DIR"
-            cp "$pubkey_path" "$KEY_DIR/${key_name}.pub"
-            log "📂 Public key exported to $KEY_DIR"
-        else
-            log "⚠️ Public key not found at $pubkey_path."
-        fi
+    if [[ -f "$cert_path" ]]; then
+        log "✅ Certificate exported from YubiKey to $cert_path"
     else
-        log "❌ Failed to generate RSA key for slot $yubikey_slot."
+        log "ERROR" "❌ Certificate file not found after export."
+        return 1
+    fi
+
+    # Export public key to local directory
+    if [[ -f "$pubkey_path" ]]; then
+        cp "$pubkey_path" "$KEY_DIR/${key_name}.pub" || {
+            log "ERROR" "❌ Failed to copy public key to $KEY_DIR/${key_name}.pub"
+            return 1
+        }
+        log "📂 Public key exported to $KEY_DIR/${key_name}.pub"
+    else
+        log "⚠️ Public key not found at $pubkey_path."
+        return 1
     fi
 }
+
+
+
+
 
 # Export Public Key from YubiKey
 export_piv_public_key() {
