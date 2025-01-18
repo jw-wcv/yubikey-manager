@@ -40,29 +40,29 @@ Host *
     IdentityAgent ${HOME}/.gnupg/S.gpg-agent.ssh
 
 # Bastion Host (Agent Forwarding Allowed)
-Host Bastion
-    HostName deployer.example.com
-    User bastion
-    ForwardAgent yes
-    PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so
-    IdentityFile ~/.ssh/id_ecdsa_sk
-    IdentityFile ~/.ssh/id_ecdsa_sk_rk
-    IdentitiesOnly yes # SSH will only use the identities from the specified IdentityFile or the key derived from the PKCS11Provider
-    AddressFamily inet
-    ServerAliveInterval 30
-    ServerAliveCountMax 5
+# Host Bastion
+#    HostName deployer.example.com
+#    User bastion
+#    ForwardAgent yes
+#    PKCS11Provider /opt/homebrew/lib/opensc-pkcs11.so
+#    IdentityFile ~/.ssh/id_ecdsa_sk
+#    IdentityFile ~/.ssh/id_ecdsa_sk_rk
+#    IdentitiesOnly yes # SSH will only use the identities from the specified IdentityFile or the key derived from the PKCS11Provider
+#    AddressFamily inet
+#    ServerAliveInterval 30
+#    ServerAliveCountMax 5
 
 # Worker Nodes (Access Through Bastion, No Direct Agent Forwarding)
-Host Node_*
-    User node
-    ForwardAgent no  # Safer - avoid forwarding agent to nodes
-    ProxyJump Bastion
-    IdentityFile ~/.ssh/id_ecdsa_sk
-    IdentityFile ~/.ssh/id_ecdsa_sk_rk
-    IdentitiesOnly yes # SSH will only use the identities from the specified IdentityFile or the key derived from the PKCS11Provider
-    AddressFamily inet
-    ServerAliveInterval 30
-    ServerAliveCountMax 5
+# Host Node_*
+#    User node
+#    ForwardAgent no  # Safer - avoid forwarding agent to nodes
+#    ProxyJump Bastion
+#    IdentityFile ~/.ssh/id_ecdsa_sk
+#    IdentityFile ~/.ssh/id_ecdsa_sk_rk
+#    IdentitiesOnly yes # SSH will only use the identities from the specified IdentityFile or the key derived from the PKCS11Provider
+#    AddressFamily inet
+#    ServerAliveInterval 30
+#    ServerAliveCountMax 5
 
 # Unique Host Configurations
 Host Battlestation
